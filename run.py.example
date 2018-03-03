@@ -1,0 +1,23 @@
+
+
+
+from rocketmap import RocketMapBot
+
+
+bot = RocketMapBot(
+            url_list=[
+                'http://site-rocketmap.example.com', 
+                
+            ],
+            center_latitude=12.34567,
+            center_longitude=-45.678901,
+            scan_gyms=True,
+            scan_pokemon=True,
+            scan_update=5,
+            auto_start=True, 
+            googlemaps_api_key='your_googlemaps_api_key',
+            telegram_token='your_telegram_bot_api_key',
+            )
+
+bot.start()
+
