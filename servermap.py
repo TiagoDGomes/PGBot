@@ -58,17 +58,19 @@ class ServerMap(object):
         h.update(add_headers)        
         self.log.debug('cookies a=' + str(self.cookies))
         self.log.info ('Baixando {0}...'.format(url))
-
-        if method == 'post':
-            result = requests.post(url, data=data, cookies=self.cookies, headers=h)
-        else:
-            result = requests.get(url, data=data, cookies=self.cookies, headers=h)
-        self.log.info ('Baixado.')
-        cookies = {i.name: i.value for i in list(result.cookies)}
-        if result.cookies.get('PHPSESSID') is not None:     
-            self.cookies = cookies
-            self.log.debug('cookies b=' + str(self.cookies))
-        self.log.debug('token={0}'.format(self.token))
+        try:
+            if method == 'post':
+                result = requests.post(url, data=data, cookies=self.cookies, headers=h)
+            else:
+                result = requests.get(url, data=data, cookies=self.cookies, headers=h)
+            self.log.info ('Baixado.')
+            cookies = {i.name: i.value for i in list(result.cookies)}
+            if result.cookies.get('PHPSESSID') is not None:     
+                self.cookies = cookies
+                self.log.debug('cookies b=' + str(self.cookies))
+            self.log.debug('token={0}'.format(self.token))
+        except:
+            return ''
         return result.text
     
 
@@ -81,7 +83,7 @@ class ServerMap(object):
         }   
         
         data = {
-            'timestamp': 0, 
+            'timestamp': timestamp, 
             'pokemon': str(self.rm_obj.scan_pokemon).lower() ,
             'lastpokemon': str(self.rm_obj.scan_pokemon).lower() ,
             'pokestops' : str(self.rm_obj.scan_pokestops).lower(),
