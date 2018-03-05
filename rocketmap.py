@@ -91,6 +91,7 @@ class RocketMapBot(threading.Thread, object):
             self.telegram_dispatcher.add_handler(CommandHandler('show', self.telegram_command_show_pokemon, pass_args=True))
             self.telegram_dispatcher.add_handler(CommandHandler('start', self.telegram_command_start))
             self.telegram_clients_ignore = {}
+            self.telegram_dispatcher.add_handler(CommandHandler('chatid', self.telegram_command_chatid))
             n = tuple()
             thread.start_new_thread(self.telegram_updater.start_polling, n)
             
@@ -151,7 +152,7 @@ class RocketMapBot(threading.Thread, object):
     @telegram_check_permission_command
     def telegram_command_spawns(self, bot, update):
         try:
-            self.list_block.remove(update.message.chat_id)
+            del self.telegram_clients_ignore[str(update.message.chat_id)]
         except:
             pass
         self.telegram_send_to_user(chat_id=update.message.chat_id, msg='Verificando spawns...')
@@ -159,13 +160,21 @@ class RocketMapBot(threading.Thread, object):
         self.telegram_send_to_user(chat_id=update.message.chat_id, msg='Verificado.')
         time.sleep(0.1)
 
+    def telegram_command_chatid(self, bot, update):
+        try:
+            del self.telegram_clients_ignore[str(update.message.chat_id)]
+        except:
+            pass
+        self.telegram_send_to_user(chat_id=update.message.chat_id, msg=update.message.chat_id)
+        
+
 
 
     @telegram_check_permission_command
     def telegram_command_show_pokemon(self, bot, update, args):
         pokemon_id=args[0]
         try:
-            self.list_block.remove(update.message.chat_id)
+            del self.telegram_clients_ignore[str(update.message.chat_id)]
         except:
             pass
         if pokemon_id.lower() == 'level':
