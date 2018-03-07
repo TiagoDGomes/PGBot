@@ -85,6 +85,7 @@ class RocketMapBot(threading.Thread, object):
             self.telegram_spool = []        
             self.telegram_interested_pokemon = load_from_file('telegram_interested_pokemon.json', {})
             self.telegram_interested_raid = load_from_file('telegram_interested_raid.json', {})
+            self.telegram_interested_iv = load_from_file('telegram_interested_iv.json', {'clients':{}, 'iv':{}, })
             self.telegram_clients = load_from_file('telegram_clients.json', {})
             self.telegram_dispatcher = self.telegram_updater.dispatcher
             self.telegram_dispatcher.add_handler(CommandHandler('spawns', self.telegram_command_spawns))
@@ -93,8 +94,13 @@ class RocketMapBot(threading.Thread, object):
             self.telegram_clients_ignore = {}
             self.telegram_dispatcher.add_handler(CommandHandler('chatid', self.telegram_command_chatid))
             self.telegram_dispatcher.add_handler(CommandHandler('gyms', self.telegram_command_gyms, pass_args=True))
+            self.telegram_dispatcher.add_handler(CommandHandler('add', self.telegram_command_add_pokemon_notify, pass_args=True))
+            self.telegram_dispatcher.add_handler(CommandHandler('remove', self.telegram_command_remove_pokemon_notify, pass_args=True))
+            self.telegram_dispatcher.add_handler(CommandHandler('export', self.telegram_command_export))
+            self.telegram_dispatcher.add_handler(CommandHandler('iv', self.telegram_command_iv_notify,pass_args=True))
             self.telegram_dispatcher.add_handler(MessageHandler((Filters.command | Filters.text), self.telegram_get_message))
             self.telegram_dispatcher.add_handler(MessageHandler((Filters.location), self.telegram_get_location))
+            self.telegram_dispatcher.add_handler(CallbackQueryHandler(self.telegram_button_click))
             '''
             self.telegram_dispatcher.add_handler(CommandHandler('remove', self.command_remove_pokemon_notify, pass_args=True))
             self.telegram_dispatcher.add_handler(CommandHandler('addraid', self.command_add_raid_notify, pass_args=True))
@@ -150,6 +156,26 @@ class RocketMapBot(threading.Thread, object):
         return check
 
 
+    @telegram_check_permission_command
+    def telegram_command_export(self, bot, update):
+        m = self._get_message_from_update(update)
+        if m.chat_id < 0:
+            chat_id = m.from_user.chat_id
+        else:
+            chat_id = m.chat_id
+        export = {'pokemon':[], 'raid': [], 'chat_id': chat_id}
+        for pokemon in self.telegram_interested_pokemon.iterkeys():
+            self.log.info(('pokemon', pokemon))
+            if str(chat_id) in self.telegram_interested_pokemon[pokemon]:
+                export['pokemon'].append(pokemon)
+                
+        for raid in self.telegram_interested_raid.iterkeys():
+            self.log.info(('raid', raid))
+            if str(chat_id) in self.telegram_interested_raid[raid]:
+                export['raid'].append(raid)
+                
+        self.telegram_send_to_user(chat_id, json.dumps(export))    
+
 
     @telegram_check_permission_command
     def telegram_command_start(self, bot, update):
@@ -175,6 +201,7 @@ class RocketMapBot(threading.Thread, object):
                                     parse_mode=telegram.ParseMode.HTML,
                             )
 
+    @telegram_check_permission_command
     def telegram_get_location(self, bot, update):        
         self.log.info('{0}: {1},{2}'.format(
             update.message.from_user.first_name,
@@ -220,8 +247,101 @@ class RocketMapBot(threading.Thread, object):
         else:
             self.telegram_send_to_user(chat_id, msg='Nenhum pokémon encontrado nesta localização.')
 
-               
+    def get_pokemon_id(self, name):
+        pokemon_id = None
+        try:
+            pokemon_id = int(name)
+            return pokemon_id
+        except: pass
+        pokemon_list = [x.lower() for x in POKEMON_LIST]
+        if name.lower() in pokemon_list:
+            pokemon_id = int(pokemon_list.index(name.lower()))    
+        return pokemon_id           
         
+    def telegram_button_click(self, bot, update):
+        query = update.callback_query 
+        chat_id = query.message.chat_id               
+        now =  time.time() * 1000
+        msg = 'Escolha inválida.'
+        try:
+            self.log.info(query.data)
+            data_split = query.data.split('|')
+            if data_split[0] == 'SHOW':
+                msg = query.message.text
+                bot.editMessageText(
+                    message_id=update.callback_query.message.message_id,
+                    chat_id=update.callback_query.message.chat.id,
+                    text=msg
+                )
+                self.telegram_command_show_pokemon(bot, query, data_split[1:])
+                
+        except Exception as e:
+            try: traceback.print_exc()           
+            except: self.log.error(e.message)
+            msg = 'Erro ao processar o comando: ' + e.message
+
+        
+
+
+    @telegram_check_permission_command
+    def telegram_command_add_pokemon_notify(self, bot, update, args):   
+        m = self._get_message_from_update(update)
+        pokemon_id = self.get_pokemon_id(args[0])
+        if m.chat_id < 0:
+            details = {}
+            chat_id = m.from_user.chat_id
+        else:
+            details = {'username': m.from_user.username,'firstname': m.from_user.first_name }
+            chat_id = m.chat_id
+        
+        if not str(pokemon_id) in self.telegram_interested_pokemon:            
+            self.telegram_interested_pokemon[str(pokemon_id)] = {'_details_':{'name': POKEMON_LIST[pokemon_id]}}
+        #self.log.info(m)
+        self.telegram_interested_pokemon[str(pokemon_id)][str(chat_id)] = details
+        save_to_file('telegram_interested_pokemon.json', self.telegram_interested_pokemon)
+        keyboard = [
+            [InlineKeyboardButton("Onde tem {0}?".format(POKEMON_LIST[pokemon_id]),callback_data='SHOW|{0}'.format(pokemon_id))],
+        ]                                    
+        reply_markup = InlineKeyboardMarkup(keyboard)                             
+        self.telegram_send_to_user(chat_id, '{0} adicionado à sua lista de monitorados.'.format(POKEMON_LIST[pokemon_id]), reply_markup=reply_markup)
+    
+
+
+    @telegram_check_permission_command
+    def telegram_command_iv_notify(self, bot, update, args):   
+        m = self._get_message_from_update(update)
+        if m.chat_id < 0:
+            chat_id = m.from_user.chat_id
+        else:
+            chat_id = m.chat_id        
+        iv = int(args[0])
+        if iv >= 90:
+            self.telegram_interested_iv['clients'][str(chat_id)] = iv
+            save_to_file('telegram_interested_iv.json', self.telegram_interested_iv)
+            self.telegram_send_to_user(chat_id, 'Pokémon com IV maior que {0} serão monitorados para você.'.format(iv), )
+        else:
+            self.telegram_send_to_user(chat_id, 'Somente pokémon com IV maior que 90 serão monitorados.', )
+                
+
+        
+    @telegram_check_permission_command
+    def telegram_command_remove_pokemon_notify(self, bot, update, args):        
+        m = self._get_message_from_update(update)
+        pokemon_id = self.get_pokemon_id(args[0])
+        if m.chat_id < 0:
+            chat_id = m.from_user.chat_id
+        else:
+            chat_id = m.chat_id
+        try:
+            del self.telegram_interested_pokemon[str(pokemon_id)][str(chat_id)]
+            save_to_file('telegram_interested_pokemon.json', self.telegram_interested_pokemon)
+            self.telegram_send_to_user(chat_id, '{0} removido da sua lista de monitorados.'.format(POKEMON_LIST[pokemon_id]))
+        except KeyError:
+            self.telegram_send_to_user(chat_id, '{0} não estava sendo monitorado.'.format(POKEMON_LIST[pokemon_id]))
+        
+
+
+    @telegram_check_permission_command
     def telegram_get_message(self, bot, update):
         m = self._get_message_from_update(update)
         text = m.text
@@ -333,14 +453,13 @@ class RocketMapBot(threading.Thread, object):
     def telegram_spool_runner(self):
         while True:            
             try: 
-                chat_id, msg, photo, preview, parse_mode = self.telegram_spool.pop(0)                           
-                self.log.info('[t] Analisando envio para {0}...'.format(chat_id))
-                if not chat_id in self.telegram_clients_ignore: 
+                chat_id, msg, photo, preview, parse_mode, reply_markup = self.telegram_spool.pop(0)                           
+                if not chat_id in self.telegram_clients_ignore and not '_' in str(chat_id): 
                     if not chat_id in self.telegram_clients and not str(chat_id) in self.telegram_clients:
-                        self.log.info('[t] Não autorizado: {0}'.format(chat_id))
+                        self.log.info('[t] Não permitido envio para: {0}'.format(chat_id))
                         try:
                             msg = MESSAGE_CLIENT_DENIED.format(chat_id=chat_id)
-                            self.telegram_bot.send_message(chat_id=int(chat_id), text=msg, disable_web_page_preview=not preview, parse_mode=parse_mode) 
+                            self.telegram_bot.send_message(chat_id=int(chat_id), text=msg, disable_web_page_preview=not preview, parse_mode=parse_mode, reply_markup=reply_markup) 
                         except telegram.error.BadRequest as bre:
                             if 'not found' in bre.message:
                                 self.telegram_clients_ignore[chat_id] = 1
@@ -356,27 +475,27 @@ class RocketMapBot(threading.Thread, object):
                                     self.log.info('[t] Enviado.') 
                                 else:
                                     final_text = '<a href="{1}">&#8205;</a>{0}'.format(msg, photo)                            
-                                    self.telegram_bot.send_message(chat_id=int(chat_id), text=final_text, parse_mode=telegram.ParseMode.HTML, disable_web_page_preview=False)
+                                    self.telegram_bot.send_message(chat_id=int(chat_id), text=final_text, parse_mode=telegram.ParseMode.HTML, disable_web_page_preview=False, reply_markup=reply_markup)
                                     self.log.info('[t] Enviado.')                                
                             else:
-                                self.telegram_bot.send_message(chat_id=int(chat_id), text=msg, disable_web_page_preview=not preview, parse_mode=parse_mode) 
+                                self.telegram_bot.send_message(chat_id=int(chat_id), text=msg, disable_web_page_preview=not preview, parse_mode=parse_mode, reply_markup=reply_markup) 
                         except telegram.error.Unauthorized:
                             self.telegram_clients_ignore[chat_id] = 1
                         except telegram.error.BadRequest as bre:
                             if 'not found' in bre.message:
                                 self.telegram_clients_ignore[chat_id] = 1
                         except Exception as e:
-                            self.log.info('[t] Erro ao eviar para {0}...'.format(chat_id))     
+                            self.log.info('[t] Erro ao enviar para {0}...'.format(chat_id))     
                             self.log.error(e.message) 
                             time.sleep(2)  
-                            self.telegram_send_to_user(chat_id, msg, photo,preview,)
+                            self.telegram_send_to_user(chat_id, msg, photo,preview,parse_mode, reply_markup=reply_markup)
                         
             except IndexError: 
                 time.sleep(1)  
             time.sleep(0.3)                   
     
-    def telegram_send_to_user(self, chat_id, msg, photo=None, preview=True, parse_mode=None):                   
-        self.telegram_spool.append((chat_id, msg, photo,preview,parse_mode,))
+    def telegram_send_to_user(self, chat_id, msg, photo=None, preview=True, parse_mode=None, reply_markup=None):                   
+        self.telegram_spool.append((chat_id, msg, photo,preview,parse_mode,reply_markup))
 
 
     
@@ -385,7 +504,7 @@ class RocketMapBot(threading.Thread, object):
         if self.telegram_updater is None:
             self.log.info('''Não é possível enviar via Telegram''')
         else:
-            telegram_interested = []              
+            telegram_interested = []
             if raid_level:
                 try:
                     if telegram_chat_id is None:
@@ -393,12 +512,13 @@ class RocketMapBot(threading.Thread, object):
                     else:
                         _list = [telegram_chat_id,]
                     for chat_id in _list:                        
-                        if not chat_id in telegram_interested:           
+                        if not chat_id in telegram_interested and not '_' in str(chat_id):                                       
                             self.log.info('L{0} para {1}'.format(raid_level, chat_id))                            
                             self.telegram_send_to_user(chat_id, message, photo=photo)
                             telegram_interested.append(chat_id)
                 except KeyError:
                     pass
+                
             if pokemon_id:
                 try:                    
                     if telegram_chat_id is None:
@@ -406,12 +526,22 @@ class RocketMapBot(threading.Thread, object):
                     else:
                         _list = [telegram_chat_id,]
                     for chat_id in _list:
-                        if not chat_id in telegram_interested:
+                        if not chat_id in telegram_interested and not '_' in str(chat_id):
                             self.log.info('#{0} para {1}'.format(pokemon_id, chat_id))
                             self.telegram_send_to_user(chat_id, message, photo=photo)
                             telegram_interested.append(chat_id)
                 except KeyError:
                     pass        
+            
+            for chat_id in self.telegram_interested_iv['clients'].iterkeys():
+                try: c = int(chat_id)
+                except: c = chat_id
+                if not c in telegram_interested:
+                    iv_client = self.telegram_interested_iv['clients'][str(chat_id)]
+                    if iv_client <= iv:                     
+                        self.log.info('#{0} para {1}'.format(pokemon_id, chat_id))
+                        self.telegram_send_to_user(c, message, photo=photo)
+                        telegram_interested.append(c)
 
 
         
@@ -476,13 +606,15 @@ class RocketMapBot(threading.Thread, object):
                     if not key in self.last_scan_pokemon:
                         self.last_scan_pokemon[key] = pokemon   
                         self.last_scan_pokemon[key]['already_notify'] = False
-                        self.last_scan_pokemon[key]['iv_updated'] = False
+                        self.last_scan_pokemon[key]['iv_changed'] = False
+                        self.last_scan_pokemon[key]['is_notified_iv'] = False
                         self.log_pokemon.debug('Adicionando {0}...'.format(timestamp_to_time(pokemon['disappear_time'])))
                     
-                    elif 'individual_attack' not in self.last_scan_pokemon[key] or self.last_scan_pokemon[key]['individual_attack'] is None :
-                        self.last_scan_pokemon[key].update(pokemon)
-                        self.last_scan_pokemon[key]['iv_updated'] = True
-                        self.log_pokemon.debug('Atualizando IV {0}...'.format(timestamp_to_time(pokemon['disappear_time'])))
+                    elif 'individual_attack' in self.last_scan_pokemon[key] and self.last_scan_pokemon[key]['individual_attack'] is not None :
+                        if not self.last_scan_pokemon[key]['is_notified_iv']:
+                            self.last_scan_pokemon[key].update(pokemon)
+                            self.last_scan_pokemon[key]['iv_changed'] = True                        
+                            self.log_pokemon.debug('Atualizando IV {0}...'.format(timestamp_to_time(pokemon['disappear_time'])))
 
         self.running_update = False
 
@@ -698,6 +830,7 @@ class RocketMapBot(threading.Thread, object):
                                 client_has_interested = str(chat_id_request) in self.telegram_interested_pokemon[str(pokemon_id)]
                             except: 
                                 pass
+                             
                         elif str(pokemon_id_request) == str(pokemon_id) or str(pokemon_id_request).lower() == pokemon_name.lower() :
                             client_has_interested = True
                             
@@ -734,7 +867,9 @@ class RocketMapBot(threading.Thread, object):
                         if not is_request_client:
                             self.send_to_interested(latitude=latitude, longitude=longitude, pokemon_id=pokemon_id, message=msg, iv=iv, photo=photo)
                             self.last_scan_pokemon[key]['already_notify'] = True
-                            self.last_scan_pokemon[key]['iv_changed'] = False                            
+                            self.last_scan_pokemon[key]['iv_changed'] = False     
+                            if iv > 0:
+                                self.last_scan_pokemon[key]['is_notified_iv'] = True                       
                         else:        
                             if client_has_interested:                                    
                                 self.telegram_send_to_user(chat_id_request, msg, photo=photo)

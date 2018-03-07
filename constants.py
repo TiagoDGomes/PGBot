@@ -12,7 +12,7 @@ NOTIFICATION_RAID_EGG_FORMAT = '🥚 Raid Level {raid_level} em "{gym_name}" (ab
 NOTIFICATION_RAID_HATCH_FORMAT = '🛡 #{raid_pokemon_id} {raid_pokemon_name}\n({raid_pokemon_move_1} / {raid_pokemon_move_2})\nRaid Level {raid_level} aberta em "{gym_name}" até {time_raid_end}\nTime: {team_name}\n\n'  + ROUTE_FORMAT + '{details}'
 NOTIFICATION_RAID_HATCH_LAZY_FORMAT = '❓ Raid Level {raid_level} aberta (mapa com atraso)\nGinásio: {gym_name}\nDe {time_raid_start} até {time_raid_end}\nTime: {team_name}\n\n'  + ROUTE_FORMAT + '{details}'
 POKEMON_THUMBNAIL_MAP_URL = 'https://maps.googleapis.com/maps/api/staticmap?zoom=15&size=500x250&maptype=roadmap&markers=icon:{icon}%7C{latitude},{longitude}&key={googlemaps_api_key}'
-MULTI_POKEMON_THUMBNAIL_MAP_URL = 'https://maps.googleapis.com/maps/api/staticmap?zoom=16&size=500x250&maptype=roadmap{markers}&key={googlemaps_api_key}'
+MULTI_POKEMON_THUMBNAIL_MAP_URL = 'https://maps.googleapis.com/maps/api/staticmap?zoom=16&size=600x550&maptype=roadmap{markers}&key={googlemaps_api_key}'
 MULTI_POKEMON_MARKER = '&markers=icon:{icon}%7C{latitude},{longitude}'
 POKEMON_ICON = 'https://veekun.com/dex/media/pokemon/icons/{pokemon_id}.png'
 RAID_HATCH_ICON = 'https://veekun.com/dex/media/pokemon/icons/{pokemon_id}.png'
@@ -45,20 +45,28 @@ FUNNY_OBS = [
 
 
 COMMANDS_HELP = ''' 
-<em>/show Magnemite</em>
+
+/add <em>Magnemite</em>
+Adiciona Magnemite na sua lista de monitorados.
+
+/remove <em>Magnemite</em>
+Remove Magnemite na sua lista de monitorados.
+
+/show <em>Magnemite</em>
 Mostrará todos os Magnemites disponíveis pelo mapa.
 
-<em>/spawns</em>
+/spawns
 Mostra todos os pokémon e raids que você selecionou.
- '''
+'''
 
 WELCOME_MESSAGE = '''Olá, {name}
-Eis os comandos para monitoramento de pokémon:
+Eis exemplos de comandos possíveis:
 {cmds}
 Você pode pedir o rastreio de um pokémon específico escrevendo, por exemplo, estas mensagens:
 
 <code>Mostre Magnemite</code>
 O mesmo que <code>/show Magnemite</code>
+
 Caso você envie sua localização, será exibido um mapa com os pokémon ao redor.
 
 Caso você envie ma imagem, não faço nada (mas se for uma foto de uma robô linda, ok).
