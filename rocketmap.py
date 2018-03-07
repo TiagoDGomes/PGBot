@@ -286,24 +286,35 @@ class RocketMapBot(threading.Thread, object):
     @telegram_check_permission_command
     def telegram_command_add_pokemon_notify(self, bot, update, args):   
         m = self._get_message_from_update(update)
-        pokemon_id = self.get_pokemon_id(args[0])
         chat_id = m.chat_id
         if chat_id < 0:
             details = {}
         else:
-            details = {'username': m.from_user.username,'firstname': m.from_user.first_name }
-            
-        
-        if not str(pokemon_id) in self.telegram_interested_pokemon:            
-            self.telegram_interested_pokemon[str(pokemon_id)] = {'_details_':{'name': POKEMON_LIST[pokemon_id]}}
-        #self.log.info(m)
-        self.telegram_interested_pokemon[str(pokemon_id)][str(chat_id)] = details
+            details = {'username': m.from_user.username,'firstname': m.from_user.first_name }           
+        poke_name_add = []    
+        for pokemon_request in args:
+            pokemon_request_comma = pokemon_request.split(',')
+            for pokemon_request_c in pokemon_request_comma:
+                pokemon_id = self.get_pokemon_id(pokemon_request_c)                
+                if not str(pokemon_id) in self.telegram_interested_pokemon:            
+                    self.telegram_interested_pokemon[str(pokemon_id)] = {'_details_':{'name': POKEMON_LIST[pokemon_id]}}
+                self.telegram_interested_pokemon[str(pokemon_id)][str(chat_id)] = details
+                poke_name_add.append(POKEMON_LIST[pokemon_id]) 
         save_to_file('telegram_interested_pokemon.json', self.telegram_interested_pokemon)
-        keyboard = [
-            [InlineKeyboardButton("Onde tem {0}?".format(POKEMON_LIST[pokemon_id]),callback_data='SHOW|{0}'.format(pokemon_id))],
-        ]                                    
-        reply_markup = InlineKeyboardMarkup(keyboard)                             
-        self.telegram_send_to_user(chat_id, '{0} adicionado à sua lista de monitorados.'.format(POKEMON_LIST[pokemon_id]), reply_markup=reply_markup)
+        reply_markup = None
+        if len(poke_name_add) == 0:
+            msg = 'Nenhum pokémon foi inserido.'
+        elif len(poke_name_add) == 1:
+            msg = '{0} foi adicionado à sua lista de monitorados.'.format(poke_name_add[0])
+            keyboard = [
+                [InlineKeyboardButton("Onde tem {0}?".format(poke_name_add[0]),callback_data='SHOW|{0}'.format(pokemon_id))],
+            ]                                    
+            reply_markup = InlineKeyboardMarkup(keyboard)  
+        elif len(poke_name_add) <= 5:
+            msg = '{0} foram adicionados à sua lista de monitorados.'.format(', '.join(poke_name_add))
+        else:
+            msg = '{0} pokémon foram adicionados à sua lista de monitorados.'.format(len(poke_name_add))
+        self.telegram_send_to_user(chat_id, msg, reply_markup=reply_markup)
     
 
 
