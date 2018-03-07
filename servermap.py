@@ -18,12 +18,12 @@ class ServerMap(object):
         self.host = self.url.replace('http://','').replace('https://','').split('/')[0]
         self.cookies = {}
         self.token = None
-        self.get_home_page()
+        
+        
         
 
     def get_home_page(self):
         self.error_count = 0
-        self.log.info('========= INICIANDO =========')
         self.cookies = {}
         home_page = self._request(self.url + '/')
         self.method = 'post'     

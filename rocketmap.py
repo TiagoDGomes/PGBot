@@ -12,7 +12,7 @@ import traceback
 import logging
 import json
 import thread
-from googleapi import get_address
+from googleapi import get_address, get_url
 from random import randint
 
 from telegram import (InlineKeyboardButton, InlineKeyboardMarkup,
@@ -92,6 +92,26 @@ class RocketMapBot(threading.Thread, object):
             self.telegram_dispatcher.add_handler(CommandHandler('start', self.telegram_command_start))
             self.telegram_clients_ignore = {}
             self.telegram_dispatcher.add_handler(CommandHandler('chatid', self.telegram_command_chatid))
+            self.telegram_dispatcher.add_handler(CommandHandler('gyms', self.telegram_command_gyms, pass_args=True))
+            self.telegram_dispatcher.add_handler(MessageHandler((Filters.command | Filters.text), self.telegram_get_message))
+            self.telegram_dispatcher.add_handler(MessageHandler((Filters.location), self.telegram_get_location))
+            '''
+            self.telegram_dispatcher.add_handler(CommandHandler('remove', self.command_remove_pokemon_notify, pass_args=True))
+            self.telegram_dispatcher.add_handler(CommandHandler('addraid', self.command_add_raid_notify, pass_args=True))
+            self.telegram_dispatcher.add_handler(CommandHandler('removeraid', self.command_remove_raid_notify, pass_args=True))
+            self.telegram_dispatcher.add_handler(CommandHandler('delete', self.command_remove_pokemon_notify, pass_args=True))
+            self.telegram_dispatcher.add_handler(CommandHandler('stats', self.command_stats, pass_args=True))
+            self.telegram_dispatcher.add_handler(CommandHandler('rares', self.command_rares))
+            self.telegram_dispatcher.add_handler(CommandHandler('list', self.command_list))
+            self.telegram_dispatcher.add_handler(CommandHandler('clear', self.command_clear))
+            self.telegram_dispatcher.add_handler(CommandHandler('notifygymchange', self.command_gym_change))
+            self.telegram_dispatcher.add_handler(CommandHandler('dontnotifygymchange', self.command_not_gym_change))
+            self.telegram_dispatcher.add_handler(CommandHandler('notifygymcpchange', self.command_gym_cp_change))
+            self.telegram_dispatcher.add_handler(CommandHandler('dontnotifygymcpchange', self.command_not_gym_cp_change))
+            self.telegram_dispatcher.add_handler(CommandHandler('limpar', self.command_clear))
+            self.telegram_dispatcher.add_handler(CommandHandler('save', self.command_save))
+            self.telegram_dispatcher.add_handler(CallbackQueryHandler(self.button_click))
+            self.telegram_dispatcher.add_handler(MessageHandler([Filters.command, Filters.text], self.get_message))'''
             n = tuple()
             thread.start_new_thread(self.telegram_updater.start_polling, n)
             
@@ -101,6 +121,8 @@ class RocketMapBot(threading.Thread, object):
 
         if auto_start:           
             self.start()            
+
+    
 
     def telegram_check_permission_command(function):
         def check(*args, **kwargs):
@@ -127,6 +149,8 @@ class RocketMapBot(threading.Thread, object):
                 bot.send_message(chat_id=chat_id, text=msg)
         return check
 
+
+
     @telegram_check_permission_command
     def telegram_command_start(self, bot, update):
         global WELCOME_MESSAGE, WELCOME_MESSAGE_GROUP
@@ -135,7 +159,11 @@ class RocketMapBot(threading.Thread, object):
         
         if chat_id < 0:
             wmsg = WELCOME_MESSAGE_GROUP
-            #chat_id = update.message.from_user.id
+            user_chat_id = update.message.from_user.id
+            user_name = update.message.from_user.username
+            #self.telegram_clients[str(chat_id)][user_chat_id] = {'username': user_name, 'chat_id': user_chat_id}
+            self.telegram_clients[str(user_chat_id)] = {'username': user_name, 'chat_id': user_chat_id}
+            save_to_file('telegram_clients.json',self.telegram_clients,)
         else:
             wmsg = WELCOME_MESSAGE
         self.telegram_send_to_user(chat_id, wmsg.format(
@@ -143,49 +171,153 @@ class RocketMapBot(threading.Thread, object):
                                     botname=bot.username,
                                     funny_obs=FUNNY_OBS[randint(0, len(FUNNY_OBS)-1)],
                                     cmds=COMMANDS_HELP,
-                                    )
+                                    ),
+                                    parse_mode=telegram.ParseMode.HTML,
                             )
 
+    def telegram_get_location(self, bot, update):        
+        self.log.info('{0}: {1},{2}'.format(
+            update.message.from_user.first_name,
+            update.message.location.latitude,
+            update.message.location.longitude,
+            
+        ))
+        latitude_request = update.message.location.latitude
+        longitude_request = update.message.location.longitude
+        chat_id = update.message.chat_id
+        markers = ''
+        msg = ''
+        count = 0
+        for key in self.last_scan_pokemon.iterkeys():                
+            pokemon = self.last_scan_pokemon[key]
+            latitude = pokemon['latitude']
+            longitude = pokemon['longitude']   
+            diff = 0.005
+            swLat = latitude - diff
+            neLat = latitude + diff
+            swLng = longitude - diff
+            neLng = longitude + diff
+            icon = POKEMON_ICON.format(pokemon_id=pokemon['pokemon_id'])
+            client_has_interested = (latitude_request < neLat and \
+                                    latitude_request  > swLat) and \
+                                    (longitude_request < neLng and \
+                                    longitude_request > swLng )
+            if client_has_interested:
+                count += 1
+                if count >=10:
+                    label = chr(55+count)
+                else:
+                    label = count
+                #markers += MULTI_POKEMON_MARKER.format(**locals()) 
+                markers += '&markers=size:mid%7Ccolor:{color}%7Clabel:{label}%7C{latitude},{longitude}'.format(color='0xff0000', label=label, latitude=latitude, longitude=longitude)
+                msg += '{0} - {1} ({2})\n'.format(label, pokemon['pokemon_name'], timestamp_to_time(pokemon['disappear_time']))
 
+        if markers:
+            photo = MULTI_POKEMON_THUMBNAIL_MAP_URL.format(markers=markers, googlemaps_api_key=self.googlemaps_api_key)
+            photo = get_url(photo, self.googlemaps_api_key)
+            self.log.info(('photo=', photo))
+            self.telegram_send_to_user(chat_id, msg=msg, photo=photo)
+        else:
+            self.telegram_send_to_user(chat_id, msg='Nenhum pokémon encontrado nesta localização.')
+
+               
+        
+    def telegram_get_message(self, bot, update):
+        m = self._get_message_from_update(update)
+        text = m.text
+        chat_id = m.chat_id
+        try:
+            self.log.info('{0}: {1}'.format(
+                m.from_user.first_name,
+                text,
+            ))            
+        except AttributeError:
+            self.log.info('{0}: {1}'.format( 
+                chat_id,
+                text,
+            ))            
+        
+        try:
+            command = [x.upper() for x in text.split(' ')]
+            if command[0] == 'MOSTRE' or command[1] == '/SHOW':                
+                self.telegram_command_show_pokemon(bot, update, command[1:])                          
+            elif command[0] in MESSAGE_HI_LIST:
+                self.telegram_send_to_user(chat_id, MESSAGE_HI_RESPONSE_LIST[randint(0, len(MESSAGE_HI_RESPONSE_LIST)-1)] )                    
+            else:
+                self.telegram_send_to_user(chat_id, DONT_KNOW_LIST[randint(0, len(DONT_KNOW_LIST)-1)])                    
+        except Exception as e:
+            self.telegram_send_to_user(chat_id, 'Buguei.\n{0}'.format(e.message))
+            traceback.print_exc()
 
 
     @telegram_check_permission_command
     def telegram_command_spawns(self, bot, update):
+        m = self._get_message_from_update(update)
         try:
-            del self.telegram_clients_ignore[str(update.message.chat_id)]
+            del self.telegram_clients_ignore[str(m.chat_id)]
         except:
             pass
-        self.telegram_send_to_user(chat_id=update.message.chat_id, msg='Verificando spawns...')
-        self.verify(chat_id_request=update.message.chat_id)    
-        self.telegram_send_to_user(chat_id=update.message.chat_id, msg='Verificado.')
+        self.telegram_send_to_user(chat_id=m.chat_id, msg='Verificando spawns...')
+        self.verify(chat_id_request=m.chat_id)    
+        self.telegram_send_to_user(chat_id=m.chat_id, msg='Verificado.')
         time.sleep(0.1)
 
     def telegram_command_chatid(self, bot, update):
+        m = self._get_message_from_update(update)
         try:
-            del self.telegram_clients_ignore[str(update.message.chat_id)]
+            del self.telegram_clients_ignore[str(m.chat_id)]
         except:
             pass
-        self.telegram_send_to_user(chat_id=update.message.chat_id, msg=update.message.chat_id)
+        self.telegram_send_to_user(chat_id=m.chat_id, msg=m.chat_id)
         
 
+    def _get_message_from_update(self, update):
+        try:
+            chat_id = update.message.chat_id
+            return update.message
+        except AttributeError:
+            try:            
+                chat_id = update.channel_post.chat_id
+                return update.channel_post
+            except:
+                pass
+        return None
+            
 
 
     @telegram_check_permission_command
     def telegram_command_show_pokemon(self, bot, update, args):
+        m = self._get_message_from_update(update)
+        chat_id =  m.chat_id
+        text = m.text
+        
+        try:
+            pokemon_id=args[0]
+        except IndexError:
+            self.telegram_send_to_user(chat_id=chat_id, msg='O comando está errado. Veja /start.')
+            return
+        try:
+            del self.telegram_clients_ignore[str(chat_id)]
+        except:
+            pass
+        if pokemon_id.lower() == 'level':
+            raid_level_request = int(args[1])
+            self.telegram_send_to_user(chat_id=chat_id, msg='Verificando raids level {0}...'.format(raid_level_request))
+            self.verify(chat_id_request=chat_id, raid_level_request=raid_level_request) 
+        else:
+            self.telegram_send_to_user(chat_id=chat_id, msg='Verificando pokémon...')
+            self.verify(chat_id_request=chat_id, pokemon_id_request=pokemon_id)    
+        self.telegram_send_to_user(chat_id=chat_id, msg='Verificado.')
+        time.sleep(0.1)
+
+    @telegram_check_permission_command
+    def telegram_command_gyms(self, bot, update, args):
         pokemon_id=args[0]
         try:
             del self.telegram_clients_ignore[str(update.message.chat_id)]
         except:
             pass
-        if pokemon_id.lower() == 'level':
-            raid_level_request = int(args[1])
-            self.telegram_send_to_user(chat_id=update.message.chat_id, msg='Verificando raids level {0}...'.format(raid_level_request))
-            self.verify(chat_id_request=update.message.chat_id, raid_level_request=raid_level_request) 
-        else:
-            self.telegram_send_to_user(chat_id=update.message.chat_id, msg='Verificando pokémon...')
-            self.verify(chat_id_request=update.message.chat_id, pokemon_id_request=pokemon_id)    
-        self.telegram_send_to_user(chat_id=update.message.chat_id, msg='Verificado.')
-        time.sleep(0.1)
+        
 
 
     def stop(self):
@@ -201,14 +333,14 @@ class RocketMapBot(threading.Thread, object):
     def telegram_spool_runner(self):
         while True:            
             try: 
-                chat_id, msg, photo, preview = self.telegram_spool.pop(0)                           
+                chat_id, msg, photo, preview, parse_mode = self.telegram_spool.pop(0)                           
                 self.log.info('[t] Analisando envio para {0}...'.format(chat_id))
                 if not chat_id in self.telegram_clients_ignore: 
                     if not chat_id in self.telegram_clients and not str(chat_id) in self.telegram_clients:
                         self.log.info('[t] Não autorizado: {0}'.format(chat_id))
                         try:
                             msg = MESSAGE_CLIENT_DENIED.format(chat_id=chat_id)
-                            self.telegram_bot.send_message(chat_id=int(chat_id), text=msg, disable_web_page_preview=not preview) 
+                            self.telegram_bot.send_message(chat_id=int(chat_id), text=msg, disable_web_page_preview=not preview, parse_mode=parse_mode) 
                         except telegram.error.BadRequest as bre:
                             if 'not found' in bre.message:
                                 self.telegram_clients_ignore[chat_id] = 1
@@ -227,13 +359,15 @@ class RocketMapBot(threading.Thread, object):
                                     self.telegram_bot.send_message(chat_id=int(chat_id), text=final_text, parse_mode=telegram.ParseMode.HTML, disable_web_page_preview=False)
                                     self.log.info('[t] Enviado.')                                
                             else:
-                                self.telegram_bot.send_message(chat_id=int(chat_id), text=msg, disable_web_page_preview=not preview) 
+                                self.telegram_bot.send_message(chat_id=int(chat_id), text=msg, disable_web_page_preview=not preview, parse_mode=parse_mode) 
                         except telegram.error.Unauthorized:
                             self.telegram_clients_ignore[chat_id] = 1
                         except telegram.error.BadRequest as bre:
                             if 'not found' in bre.message:
                                 self.telegram_clients_ignore[chat_id] = 1
-                        except telegram.error.TimedOut or telegram.error.NetworkError or telegram.error.RetryAfter:
+                        except Exception as e:
+                            self.log.info('[t] Erro ao eviar para {0}...'.format(chat_id))     
+                            self.log.error(e.message) 
                             time.sleep(2)  
                             self.telegram_send_to_user(chat_id, msg, photo,preview,)
                         
@@ -241,8 +375,8 @@ class RocketMapBot(threading.Thread, object):
                 time.sleep(1)  
             time.sleep(0.3)                   
     
-    def telegram_send_to_user(self, chat_id, msg, photo=None, preview=True):                   
-        self.telegram_spool.append((chat_id, msg, photo,preview,))
+    def telegram_send_to_user(self, chat_id, msg, photo=None, preview=True, parse_mode=None):                   
+        self.telegram_spool.append((chat_id, msg, photo,preview,parse_mode,))
 
 
     
@@ -367,7 +501,7 @@ class RocketMapBot(threading.Thread, object):
 
         
         
-    def verify(self, chat_id_request=None, pokemon_id_request=None, raid_level_request=None):
+    def verify(self, chat_id_request=None, pokemon_id_request=None, raid_level_request=None, latitude_request=None, longitude_request=None,):
         #raw_data = self.last_raw_data
         now =  int(time.time() * 1000)         
         details = ''
@@ -547,14 +681,26 @@ class RocketMapBot(threading.Thread, object):
                     key = "{0},{1},{2}".format(encounter_id, latitude, longitude)
                     
                     client_has_interested = False
-                    if pokemon_id_request is None:
-                        try:
-                            client_has_interested = str(chat_id_request) in self.telegram_interested_pokemon[str(pokemon_id)]
-                        except: 
-                            pass
-                    elif str(pokemon_id_request) == str(pokemon_id) or str(pokemon_id_request).lower() == pokemon_name.lower() :
-                        client_has_interested = True
-                        
+                    if latitude_request and longitude_request:
+                        diff = 0.001
+                        swLat = latitude - diff
+                        neLat = latitude + diff
+                        swLng = longitude - diff
+                        neLng = longitude + diff
+
+                        client_has_interested = (latitude_request < neLat and \
+                                                latitude_request  > swLat) and \
+                                                (longitude_request < neLng and \
+                                                longitude_request > swLng )
+                    else:    
+                        if pokemon_id_request is None:
+                            try:
+                                client_has_interested = str(chat_id_request) in self.telegram_interested_pokemon[str(pokemon_id)]
+                            except: 
+                                pass
+                        elif str(pokemon_id_request) == str(pokemon_id) or str(pokemon_id_request).lower() == pokemon_name.lower() :
+                            client_has_interested = True
+                            
                     if not already_notify or client_has_interested or (chat_id_request is None and iv_changed):                        
                         self.log_pokemon.debug(pokemon_name + ' apareceu') 
                         try:
@@ -588,8 +734,7 @@ class RocketMapBot(threading.Thread, object):
                         if not is_request_client:
                             self.send_to_interested(latitude=latitude, longitude=longitude, pokemon_id=pokemon_id, message=msg, iv=iv, photo=photo)
                             self.last_scan_pokemon[key]['already_notify'] = True
-                            self.last_scan_pokemon[key]['iv_changed'] = False
-                            
+                            self.last_scan_pokemon[key]['iv_changed'] = False                            
                         else:        
                             if client_has_interested:                                    
                                 self.telegram_send_to_user(chat_id_request, msg, photo=photo)
@@ -611,37 +756,43 @@ class RocketMapBot(threading.Thread, object):
         count_errors = 0
         for chat_id in self.telegram_clients:
             self.telegram_send_to_user(chat_id, 'O robô foi reiniciado.')
+        
+        while True:
+            self.log.info('========= INICIANDO =========')
+            for m in self.servers_map:
+                m.get_home_page()
 
-        while self._running:
-            c += 1
-            try:
-                if not first and self.scan_update <= 5:
-                    timestamp = int(time.time())
-                #if not self.running_update:
-                self.get_updates(timestamp,)
-                
-            except Exception as e:
+            while self._running:
+                c += 1
                 try:
-                    traceback.print_exc()
-                    count_errors += 1
-                except:
-                    pass 
-            first = False
-            #if not self.running_update:
-            self.verify()  
+                    if not first and self.scan_update <= 5:
+                        timestamp = int(time.time())
+                    #if not self.running_update:
+                    self.get_updates(timestamp,)
+                    
+                except Exception as e:
+                    try:
+                        traceback.print_exc()
+                        count_errors += 1
+                    except:
+                        pass 
+                first = False
+                #if not self.running_update:
+                self.verify()  
 
-            self.log.info('Pause')
-            time.sleep(self.scan_update+4)    
-               
-            if c > 30:
-                c = 0
-                self.clear_disappear()
-                time.sleep(self.scan_update - 1)
-                self.running_update = False
-            else:
-                time.sleep(self.scan_update)
-            if count_errors > 5:
-                self._running = False
+                self.log.info('Pause')
+                time.sleep(self.scan_update+4)    
+                
+                if c > 30:
+                    c = 0
+                    self.clear_disappear()
+                    time.sleep(self.scan_update - 1)
+                    self.running_update = False
+                else:
+                    time.sleep(self.scan_update)
+                if count_errors > 5:
+                    self._running = False
+        self
             
             
 if __name__ == "__main__": 
