@@ -10,6 +10,8 @@ import logging
 from util import load_from_file, save_to_file
 
 addresses = load_from_file('address.json', {})
+urls = load_from_file('urls.json', {})
+
 log_google = logging.getLogger('goog')  
 
 def get_address(latitude, longitude, googlemaps_api_key, force=True, no_cache=False):
@@ -36,5 +38,29 @@ def get_address(latitude, longitude, googlemaps_api_key, force=True, no_cache=Fa
             traceback.print_exc()
     if force:
         return '[{0},{1}]'.format(latitude, longitude)
+    else:
+        return ''
+
+
+def get_url(url, google_api_key, force=True):
+    global urls
+    if url in urls:
+        return urls[url]
+
+    if google_api_key and force:
+        log_google.info('usando Google API Shortner ')
+        try:                    
+            url_api = "https://www.googleapis.com/urlshortener/v1/url?key={key}".format(key=google_api_key)
+            post = {'longUrl': url}
+            raw_data = requests.post(url_api, json=post)
+            data = json.loads(raw_data.text) 
+            log_google.info(data)              
+            urls[url] = data['id']
+            save_to_file('urls.json', urls)
+            return data['id']
+        except:
+            traceback.print_exc()
+    if force:
+        return url
     else:
         return ''
