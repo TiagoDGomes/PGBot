@@ -3,3 +3,6 @@ address.json
 telegram_*.json
 raw_data_*.test.json
 run.py
+/urls.json
+/gym_details.json
+/.vscode
