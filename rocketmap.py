@@ -46,8 +46,10 @@ class RocketMapBot(threading.Thread, object):
                             scan_update=30,
                             googlemaps_api_key=None,
                             telegram_token=None,
+                            main_group=[],
                             ):
         super(RocketMapBot, self).__init__()
+        self.main_group = main_group
         self.scan_update = scan_update
         self.center_latitude = center_latitude
         self.center_longitude = center_longitude
@@ -144,23 +146,24 @@ class RocketMapBot(threading.Thread, object):
             bot = args[1]
             update = args[2]
             try:
-                chat_id = str(update.message.chat_id)
-                if not chat_id in self.telegram_clients:
-                    try:
-                        query = update.callback_query
-                        chat_id = str(query.message.chat_id)
-                        if not chat_id in self.telegram_clients:
-                            authorized = True
-                    except:
-                        authorized = False
+                chat_id = update.message.chat_id
+                if not chat_id in self.main_group:
+                    if not str(chat_id) in self.telegram_clients:
+                        try:
+                            query = update.callback_query
+                            chat_id = str(query.message.chat_id)
+                            if not chat_id in self.telegram_clients:
+                                authorized = False
+                        except:
+                            authorized = False
             except AttributeError:
                 pass
             if authorized:
                 function(*args, **kwargs)
             else:
-                msg = MESSAGE_CLIENT_DENIED.format(chat_id=chat_id)
-                #bot.send_message(chat_id=chat_id, text=msg)
-                self.log.error(msg)
+                msg = MESSAGE_CLIENT_DENIED.format(chat_id)
+                bot.send_message(chat_id=chat_id, text=msg)
+                #self.log.error(msg)
         return check
 
 
@@ -463,11 +466,11 @@ class RocketMapBot(threading.Thread, object):
             try: 
                 chat_id, msg, photo, preview, parse_mode, reply_markup = self.telegram_spool.pop(0)                           
                 if not chat_id in self.telegram_clients_ignore and not '_' in str(chat_id): 
-                    if not chat_id in self.telegram_clients and not str(chat_id) in self.telegram_clients:
+                    if not chat_id in self.telegram_clients and not str(chat_id) in self.telegram_clients and not chat_id in self.main_group:
                         self.log.info('[t] Não permitido envio para: {0}'.format(chat_id))
                         try:
                             msg = MESSAGE_CLIENT_DENIED.format(chat_id=chat_id)
-                            self.telegram_bot.send_message(chat_id=chat_id, text=msg, disable_web_page_preview=not preview, parse_mode=parse_mode, reply_markup=reply_markup)                                                         
+                            #self.telegram_bot.send_message(chat_id=chat_id, text=msg, disable_web_page_preview=not preview, parse_mode=parse_mode, reply_markup=reply_markup)                                                         
                         except:
                             pass
                         self.telegram_clients_ignore[chat_id] = 1
@@ -690,7 +693,7 @@ class RocketMapBot(threading.Thread, object):
                 raid_status_string = str(is_egg) + str(is_normal) + str(is_raid)
                 last_raid_status_string = None if not 'raid_status_string' in self.gym_details[gym_id] else self.gym_details[gym_id]['raid_status_string']
                 gym_updated = (gym['last_scanned'] >= self.gym_details[gym_id]['last_scanned'])
-                gym_changed = (last_raid_status_string != raid_status_string)
+                gym_changed = (last_raid_status_string != raid_status_string) or (is_raid and raid_pokemon_id != self.gym_details[gym_id]['raid_pokemon_id'])
                 
                 gym_without_raid = (raid_end == 0 or raid_end < now or raid_level == 0)
                 is_dominated = (self.gym_details[gym_id]['team_id'] != gym['team_id'])
