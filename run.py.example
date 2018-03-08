@@ -19,6 +19,7 @@ bot = RocketMapBot(
             auto_start=True, 
             googlemaps_api_key='your_googlemaps_api_key',
             telegram_token='your_telegram_bot_api_key',
+            main_group=[-1234567890,] 
             )
 
 
