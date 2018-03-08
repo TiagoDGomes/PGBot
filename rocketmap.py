@@ -1,30 +1,37 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
+
 import sys
 reload(sys)
 sys.setdefaultencoding("utf-8")
 
-import time
-import requests
-import telegram
-import threading
-import traceback
-import logging
 import json
+import logging
 import thread
-from googleapi import get_address, get_url
+import threading
+import time
+import traceback
 from random import randint
 
+import requests
+import telegram
 from telegram import (InlineKeyboardButton, InlineKeyboardMarkup,
                       ReplyKeyboardMarkup)
 from telegram.ext import (CallbackQueryHandler, CommandHandler, Filters,
                           MessageHandler, Updater)
 
-from servermap import ServerMap
-
-from util import load_from_file, save_to_file, datetime_from_utc_to_local, timestamp_to_time
-
 from constants import *
+from googleapi import get_address, get_url
+from servermap import ServerMap
+from util import (datetime_from_utc_to_local, load_from_file, save_to_file,
+                  timestamp_to_time)
+
+
+
+
+
+
+
 
 class RocketMapBot(threading.Thread, object):
     
@@ -129,7 +136,7 @@ class RocketMapBot(threading.Thread, object):
             self.start()            
 
     
-
+    @staticmethod
     def telegram_check_permission_command(function):
         def check(*args, **kwargs):
             authorized = True
@@ -224,7 +231,6 @@ class RocketMapBot(threading.Thread, object):
             neLat = latitude + diff
             swLng = longitude - diff
             neLng = longitude + diff
-            icon = POKEMON_ICON.format(pokemon_id=pokemon['pokemon_id'])
             client_has_interested = (latitude_request < neLat and \
                                     latitude_request  > swLat) and \
                                     (longitude_request < neLng and \
@@ -235,6 +241,7 @@ class RocketMapBot(threading.Thread, object):
                     label = chr(55+count)
                 else:
                     label = count
+                #icon = POKEMON_ICON.format(pokemon_id=pokemon['pokemon_id'])
                 #markers += MULTI_POKEMON_MARKER.format(**locals()) 
                 markers += '&markers=size:mid%7Ccolor:{color}%7Clabel:{label}%7C{latitude},{longitude}'.format(color='0xff0000', label=label, latitude=latitude, longitude=longitude)
                 msg += '{0} - {1} ({2})\n'.format(label, pokemon['pokemon_name'], timestamp_to_time(pokemon['disappear_time']))
@@ -260,8 +267,6 @@ class RocketMapBot(threading.Thread, object):
         
     def telegram_button_click(self, bot, update):
         query = update.callback_query 
-        chat_id = query.message.chat_id               
-        now =  time.time() * 1000
         msg = 'Escolha inválida.'
         try:
             self.log.info(query.data)
@@ -396,11 +401,11 @@ class RocketMapBot(threading.Thread, object):
 
     def _get_message_from_update(self, update):
         try:
-            chat_id = update.message.chat_id
+            _ = update.message.chat_id
             return update.message
         except AttributeError:
             try:            
-                chat_id = update.channel_post.chat_id
+                _ = update.channel_post.chat_id
                 return update.channel_post
             except:
                 pass
@@ -419,9 +424,7 @@ class RocketMapBot(threading.Thread, object):
     @telegram_check_permission_command
     def telegram_command_show_pokemon(self, bot, update, args):
         m = self._get_message_from_update(update)
-        chat_id =  m.chat_id
-        text = m.text
-        
+        chat_id =  m.chat_id        
         try:
             pokemon_id=args[0]
         except IndexError:
@@ -440,8 +443,7 @@ class RocketMapBot(threading.Thread, object):
 
     @telegram_check_permission_command
     def telegram_command_gyms(self, bot, update, args):
-        pokemon_id=args[0]
-        self.telegram_unlock_chat_id(chat_id)
+        self.telegram_send_to_user(chat_id=update.message.chat_id, msg='Comando não implementado.')
         
 
 
@@ -662,11 +664,9 @@ class RocketMapBot(threading.Thread, object):
                 raid_pokemon_name = None 
                 if 'raid_pokemon_name' in gym:
                     raid_pokemon_name = gym['raid_pokemon_name']
-                first_update = False
                 if not gym_id in self.gym_details:
                     self.gym_details[gym_id] = {}
                     self.gym_details[gym_id].update(gym)
-                    first_update = True
                     save_to_file('gym_details.json', self.gym_details)
                 if self.gym_details[gym_id]['name'] is None:
                     self.gym_details[gym_id]['name'] = get_address(gym['latitude'], gym['longitude'], self.googlemaps_api_key)
@@ -916,7 +916,7 @@ class RocketMapBot(threading.Thread, object):
                     #if not self.running_update:
                     self.get_updates(timestamp,)
                     
-                except Exception as e:
+                except:
                     try:
                         traceback.print_exc()
                         count_errors += 1
@@ -946,4 +946,3 @@ if __name__ == "__main__":
         import run
     except: 
         traceback.print_exc()
-
