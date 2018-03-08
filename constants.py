@@ -6,7 +6,7 @@ FORMAT_LOG = '%(asctime)s %(name)s %(message)s'
 GENDER_LIST = ['','♂', '♀', '⚲']
 TEAM_LIST = ['(vazio)', 'Mystic', 'Valor', 'Instinct']
 ROUTE_FORMAT = 'http://maps.google.com/?q={latitude},{longitude}'
-MESSAGE_CLIENT_DENIED = 'Você não está autorizado a conversar comigo. Seu código é {chat_id}.'
+MESSAGE_CLIENT_DENIED = 'Você não está autorizado a conversar comigo. \nVocê precisará entrar no seu grupo de acesso e dar o comando /start.\nSeu código é {0}.'
 NOTIFICATION_WILD_FORMAT = '🐾 #{pokemon_id} {pokemon_name} {gender}\nAté {disappear_time_str}{details}\n\n' + ROUTE_FORMAT 
 NOTIFICATION_RAID_EGG_FORMAT = '🥚 Raid Level {raid_level} em "{gym_name}" (abre às {time_raid_start})\n\n'  + ROUTE_FORMAT + '{details}'
 NOTIFICATION_RAID_HATCH_FORMAT = '🛡 #{raid_pokemon_id} {raid_pokemon_name}\n({raid_pokemon_move_1} / {raid_pokemon_move_2})\nRaid Level {raid_level} aberta em "{gym_name}" até {time_raid_end}\nTime: {team_name}\n\n'  + ROUTE_FORMAT + '{details}'
