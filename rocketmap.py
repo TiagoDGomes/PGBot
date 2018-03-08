@@ -158,7 +158,7 @@ class RocketMapBot(threading.Thread, object):
             if authorized:
                 function(*args, **kwargs)
             else:
-                msg = 'Você não está autorizado a conversar comigo. \nVocê precisará entrar no seu grupo de acesso e dar o comando /start.\nSeu código é {0}.'.format(chat_id)
+                msg = MESSAGE_CLIENT_DENIED.format(chat_id=chat_id)
                 #bot.send_message(chat_id=chat_id, text=msg)
                 self.log.error(msg)
         return check
