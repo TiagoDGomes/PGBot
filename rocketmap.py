@@ -136,7 +136,7 @@ class RocketMapBot(threading.Thread, object):
             self.start()            
 
     
-    @staticmethod
+    
     def telegram_check_permission_command(function):
         def check(*args, **kwargs):
             authorized = True
@@ -159,7 +159,8 @@ class RocketMapBot(threading.Thread, object):
                 function(*args, **kwargs)
             else:
                 msg = 'Você não está autorizado a conversar comigo. \nVocê precisará entrar no seu grupo de acesso e dar o comando /start.\nSeu código é {0}.'.format(chat_id)
-                bot.send_message(chat_id=chat_id, text=msg)
+                #bot.send_message(chat_id=chat_id, text=msg)
+                self.log.error(msg)
         return check
 
 
