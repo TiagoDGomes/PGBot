@@ -686,7 +686,6 @@ class RocketMapBot(threading.Thread, object):
                     
                     
                 
-                #raid_status_string = (str(raid_start) + str(raid_level) + str(raid_pokemon_id) + str(is_egg))
                 raid_status_string = str(is_egg) + str(is_normal) + str(is_raid)
                 last_raid_status_string = None if not 'raid_status_string' in self.gym_details[gym_id] else self.gym_details[gym_id]['raid_status_string']
                 gym_updated = (gym['last_scanned'] >= self.gym_details[gym_id]['last_scanned'])
@@ -719,23 +718,11 @@ class RocketMapBot(threading.Thread, object):
                     if str(raid_pokemon_id) in self.telegram_interested_pokemon:
                         has_interested = True
                         if str(chat_id_request) in self.telegram_interested_pokemon[str(raid_pokemon_id)]:
-                            is_client_interested_raid = True
-
-                
-
-                self.log.debug(('is_request_client=', is_request_client))
-                self.log.debug(('has_interested=', has_interested))
-                self.log.debug(('is_requested_level=', is_requested_level))
-                self.log.debug(('raid_level_request=', raid_level_request))
-                self.log.debug(('raid_level=', raid_level))
-                        
-                        
-                
+                            is_client_interested_raid = True                
                 
                 if gym_without_raid:
                     self.log_raid.debug('== --  [---]')
-                elif has_interested:
-                    
+                elif has_interested:                    
                     if is_request_client or gym_changed:                                             
                         time_raid_start = timestamp_to_time(raid_start)
                         time_raid_end = timestamp_to_time(raid_end)  
