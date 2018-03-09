@@ -32,7 +32,8 @@ def get_address(latitude, longitude, googlemaps_api_key, force=True, no_cache=Fa
             if 'results' in data:
                 formatted_address = data['results'][0]['formatted_address']
                 addresses[latlng] = data
-                save_to_file('address.json', addresses)
+                if len(addresses) % 25 == 0:
+                    save_to_file('address.json', addresses)
                 return formatted_address
         except:
             traceback.print_exc()

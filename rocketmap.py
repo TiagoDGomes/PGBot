@@ -48,8 +48,10 @@ class RocketMapBot(threading.Thread, object):
                             telegram_token=None,
                             main_group=[],
                             min_iv=90,
+                            always_full_address=False,
                             ):
         super(RocketMapBot, self).__init__()
+        self.always_full_address = always_full_address
         self.min_iv = min_iv
         self.main_group = main_group
         self.scan_update = scan_update
@@ -303,15 +305,15 @@ class RocketMapBot(threading.Thread, object):
                     pokemon['gender'] = GENDER_LIST[int(g)] 
                 except:
                     pass
-                self.log.info(('pokemon_gender=', pokemon['gender']))
                 if iv < 0:
                     keyboard = [
                         [InlineKeyboardButton("Buscar IV novamente",callback_data='IV|{0},{1},{2}'.format(pokemon['encounter_id'], pokemon['latitude'], pokemon['longitude']))],
                     ]
                     reply_markup = InlineKeyboardMarkup(keyboard)
                 else:
-                    reply_markup = None           
-                pokemon['details'] = details        
+                    reply_markup = None          
+                        
+                pokemon['details'] = '{0}\n{1}'.format(details, get_address(pokemon['latitude'], pokemon['longitude'], self.googlemaps_api_key,no_cache=True, force=False))
                 msg = NOTIFICATION_WILD_FORMAT.format(**pokemon)
                 
                 try:
@@ -558,7 +560,18 @@ class RocketMapBot(threading.Thread, object):
         self.telegram_spool.append((chat_id, msg, photo,preview,parse_mode,reply_markup))
 
 
-    
+    def telegram_has_interested(self, pokemon_id=None, raid_level=None):
+        if pokemon_id is not None:
+            if pokemon_id in self.telegram_interested_pokemon:                
+                return len(self.telegram_interested_pokemon[pokemon_id]) >= 2
+            if str(pokemon_id) in self.telegram_interested_pokemon:
+                return len(self.telegram_interested_pokemon[str(pokemon_id)]) >= 2
+        if raid_level is not None:
+            if raid_level in self.telegram_interested_raid:
+                return len(self.telegram_interested_raid[raid_level]) > 2
+            if str(raid_level) in self.telegram_interested_raid:
+                return len(self.telegram_interested_raid[str(raid_level)]) > 2
+        return False
         
     def send_to_interested(self, latitude, longitude, raid_level=None, is_egg=True, pokemon_id=None, iv=-1, message=None, time_delay=0, photo=None, telegram_chat_id=None, encounter_id=None):        
         if self.telegram_updater is None:
@@ -906,9 +919,7 @@ class RocketMapBot(threading.Thread, object):
                                 gender = ''
                         poke_counter += 1
                         iv, at, df, st = self._pokemon_stats(pokemon)
-                        no_cache = False
-                        if iv > 93:
-                            no_cache = True                        
+                                              
                         details = ''
                         if at is not None and df is not None and st is not None :
                             details = '{d}\nIV: {iv}% ({at}/{df}/{st})'.format(d=details, iv=iv, at=at, df=df, st=st)                                    
@@ -917,8 +928,11 @@ class RocketMapBot(threading.Thread, object):
                         if pokemon['level'] is not None:
                             details = '{0} | L{1}'.format(details, pokemon['level'])
                         
+                        no_cache = False
                                               
-                        if pokemon_id in RARE_LIST:
+                        if self.always_full_address or pokemon_id in RARE_LIST or iv > 93:
+                            no_cache = True
+                        if self.telegram_has_interested(pokemon_id=pokemon_id):
                             no_cache = True
                         details = '{0}\n{1}'.format(details, get_address(latitude, longitude, self.googlemaps_api_key,no_cache=no_cache, force=False))
                         disappear_time_str = timestamp_to_time(disappear_time)
