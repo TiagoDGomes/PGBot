@@ -7,10 +7,10 @@ GENDER_LIST = ['','♂', '♀', '⚲']
 TEAM_LIST = ['(vazio)', 'Mystic', 'Valor', 'Instinct']
 ROUTE_FORMAT = 'http://maps.google.com/?q={latitude},{longitude}'
 MESSAGE_CLIENT_DENIED = 'Você não está autorizado a conversar comigo. \nVocê precisará entrar no seu grupo de acesso e dar o comando /start.\nSeu código é {0}.'
-NOTIFICATION_WILD_FORMAT = '🐾 #{pokemon_id} {pokemon_name} {gender}\nAté {disappear_time_str}{details}\n\n' + ROUTE_FORMAT 
-NOTIFICATION_RAID_EGG_FORMAT = '🥚 Raid Level {raid_level} em "{gym_name}" (abre às {time_raid_start})\n\n'  + ROUTE_FORMAT + '{details}'
-NOTIFICATION_RAID_HATCH_FORMAT = '🛡 #{raid_pokemon_id} {raid_pokemon_name}\n({raid_pokemon_move_1} / {raid_pokemon_move_2})\nRaid Level {raid_level} aberta em "{gym_name}" até {time_raid_end}\nTime: {team_name}\n\n'  + ROUTE_FORMAT + '{details}'
-NOTIFICATION_RAID_HATCH_LAZY_FORMAT = '❓ Raid Level {raid_level} aberta (mapa com atraso)\nGinásio: {gym_name}\nDe {time_raid_start} até {time_raid_end}\nTime: {team_name}\n\n'  + ROUTE_FORMAT + '{details}'
+NOTIFICATION_WILD_FORMAT = '🐾 #{pokemon_id} <b>{pokemon_name}</b> {gender}\nAté {disappear_time_str}{details}\n' + ROUTE_FORMAT 
+NOTIFICATION_RAID_EGG_FORMAT = '🥚 <b>Raid Level {raid_level}</b> em "{gym_name}" (abre às <b>{time_raid_start}</b>)\n'  + ROUTE_FORMAT + '{details}'
+NOTIFICATION_RAID_HATCH_FORMAT = '🛡 #{raid_pokemon_id} <b>{raid_pokemon_name}</b>\n({raid_pokemon_move_1} / {raid_pokemon_move_2})\nRaid Level {raid_level} aberta em <b>"{gym_name}"</b> até {time_raid_end}\nTime: {team_name}\n'  + ROUTE_FORMAT + '{details}'
+NOTIFICATION_RAID_HATCH_LAZY_FORMAT = '❓ <b>Raid Level {raid_level} aberta</b> (mapa com atraso)\nGinásio: <b>{gym_name}</b>\nDe {time_raid_start} até {time_raid_end}\nTime: {team_name}\n'  + ROUTE_FORMAT + '{details}'
 POKEMON_THUMBNAIL_MAP_URL = 'https://maps.googleapis.com/maps/api/staticmap?zoom=15&size=500x250&maptype=roadmap&markers=icon:{icon}%7C{latitude},{longitude}&key={googlemaps_api_key}'
 MULTI_POKEMON_THUMBNAIL_MAP_URL = 'https://maps.googleapis.com/maps/api/staticmap?zoom=16&size=600x550&maptype=roadmap{markers}&key={googlemaps_api_key}'
 MULTI_POKEMON_MARKER = '&markers=icon:{icon}%7C{latitude},{longitude}'
