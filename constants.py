@@ -12,7 +12,7 @@ NOTIFICATION_RAID_EGG_FORMAT = '🥚 <b>Raid Level {raid_level}</b> em "{gym_nam
 NOTIFICATION_RAID_HATCH_FORMAT = '🛡 #{raid_pokemon_id} <b>{raid_pokemon_name}</b>\n({raid_pokemon_move_1} / {raid_pokemon_move_2})\nRaid Level {raid_level} aberta em <b>"{gym_name}"</b> até {time_raid_end}\nTime: {team_name}\n'  + ROUTE_FORMAT + '{details}'
 NOTIFICATION_RAID_HATCH_LAZY_FORMAT = '❓ <b>Raid Level {raid_level} aberta</b> (mapa com atraso)\nGinásio: <b>{gym_name}</b>\nDe {time_raid_start} até {time_raid_end}\nTime: {team_name}\n'  + ROUTE_FORMAT + '{details}'
 POKEMON_THUMBNAIL_MAP_URL = 'https://maps.googleapis.com/maps/api/staticmap?zoom=15&size=500x250&maptype=roadmap&markers=icon:{icon}%7C{latitude},{longitude}&key={googlemaps_api_key}'
-MULTI_POKEMON_THUMBNAIL_MAP_URL = 'https://maps.googleapis.com/maps/api/staticmap?zoom=16&size=600x550&maptype=roadmap{markers}&key={googlemaps_api_key}'
+MULTI_POKEMON_THUMBNAIL_MAP_URL = 'https://maps.googleapis.com/maps/api/staticmap?zoom=17&size=600x550&maptype=roadmap{markers}&key={googlemaps_api_key}'
 MULTI_POKEMON_MARKER = '&markers=icon:{icon}%7C{latitude},{longitude}'
 POKEMON_ICON = 'https://veekun.com/dex/media/pokemon/icons/{pokemon_id}.png'
 RAID_HATCH_ICON = 'https://veekun.com/dex/media/pokemon/icons/{pokemon_id}.png'
