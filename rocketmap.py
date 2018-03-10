@@ -896,6 +896,7 @@ class RocketMapBot(threading.Thread, object):
                     longitude = pokemon['longitude'] 
                     already_notify = pokemon['already_notify']
                     is_notified_iv = 'is_notified_iv' in pokemon and pokemon['is_notified_iv']                          
+                    iv_changed = 'iv_changed' in pokemon and pokemon['iv_changed']                          
 
                     move_list = ''
                     try:
@@ -930,7 +931,7 @@ class RocketMapBot(threading.Thread, object):
                         elif str(pokemon_id_request) == str(pokemon_id) or str(pokemon_id_request).lower() == pokemon_name.lower() :
                             client_has_interested = True
      
-                    if not already_notify or client_has_interested or (chat_id_request is None and not is_notified_iv):                        
+                    if not already_notify or client_has_interested or (chat_id_request is None and not is_notified_iv and iv_changed):                        
                         self.log_pokemon.debug(pokemon_name + ' apareceu') 
                         try:
                             gender = GENDER_LIST[int(pokemon['gender'])]
