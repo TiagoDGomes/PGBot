@@ -424,32 +424,33 @@ class RocketMapBot(threading.Thread, object):
         m = self._get_message_from_update(update)
         text = m.text
         chat_id = m.chat_id
-        try:
-            self.log.info('{0}: {1}'.format(
-                m.from_user.first_name,
-                text,
-            ))            
-        except AttributeError:
-            self.log.info('{0}: {1}'.format( 
-                chat_id,
-                text,
-            ))            
-        
-        try:
-            command = [x.upper() for x in text.split(' ')]
+        if chat_id > 0:
             try:
-                command1 = command[1]
-            except:
-                command1 = ''
-            if command[0] == 'MOSTRE':                
-                self.telegram_command_show_pokemon(bot, update, command[1:])                          
-            elif command[0] in MESSAGE_HI_LIST:
-                self.telegram_send_to_user(chat_id, MESSAGE_HI_RESPONSE_LIST[randint(0, len(MESSAGE_HI_RESPONSE_LIST)-1)] )                    
-            else:
-                self.telegram_send_to_user(chat_id, DONT_KNOW_LIST[randint(0, len(DONT_KNOW_LIST)-1)])                    
-        except Exception as e:
-            self.telegram_send_to_user(chat_id, 'Buguei.\n{0}'.format(e.message))
-            traceback.print_exc()
+                self.log.debug('{0}: {1}'.format(
+                    m.from_user.first_name,
+                    text,
+                ))            
+            except AttributeError:
+                self.log.debug('{0}: {1}'.format( 
+                    chat_id,
+                    text,
+                ))            
+            
+            try:
+                command = [x.upper() for x in text.split(' ')]
+                try:
+                    command1 = command[1]
+                except:
+                    command1 = ''
+                if command[0] == 'MOSTRE':                
+                    self.telegram_command_show_pokemon(bot, update, command[1:])                          
+                elif command[0] in MESSAGE_HI_LIST:
+                    self.telegram_send_to_user(chat_id, MESSAGE_HI_RESPONSE_LIST[randint(0, len(MESSAGE_HI_RESPONSE_LIST)-1)] )                    
+                else:
+                    self.telegram_send_to_user(chat_id, DONT_KNOW_LIST[randint(0, len(DONT_KNOW_LIST)-1)])                    
+            except Exception as e:
+                self.telegram_send_to_user(chat_id, 'Buguei.\n{0}'.format(e.message))
+                traceback.print_exc()
 
 
     @telegram_check_permission_command
@@ -662,6 +663,7 @@ class RocketMapBot(threading.Thread, object):
         if self.scan_gyms:
             #self.last_scan_gyms.update(last_raw_data['gyms'])
             dict_v = isinstance(last_raw_data['gyms'], dict)  
+            need_save_details = False
             for g in last_raw_data['gyms']:                
                 # Há diferença em 'gyms' entre versões antigas e novas do RocketMap
                 if dict_v:                    
@@ -670,12 +672,115 @@ class RocketMapBot(threading.Thread, object):
                 else:
                     gym = g
                     gym_id = gym['gym_id']  
+                force_as_updated = False
+                # valores do último update #
+                raid_pokemon_id =  None  
+                if 'raid_pokemon_id' in gym and gym['raid_pokemon_id'] != 0:
+                    raid_pokemon_id = gym['raid_pokemon_id']
+                
+                raid_pokemon_name = None 
+                if 'raid_pokemon_name' in gym:
+                    raid_pokemon_name = gym['raid_pokemon_name']
+
+                raid_start = gym['raid_start']     
+                raid_end = gym['raid_end'] 
+                is_egg = raid_start > now
+                is_normal = raid_end < now and raid_start < now
+                is_raid = not is_egg and not is_normal
+                is_egg_with_pokemon = is_egg and raid_pokemon_id is not None
+                is_raid_with_pokemon = is_raid and raid_pokemon_id is not None
+
                 if not gym_id in self.last_scan_gyms:
-                    self.last_scan_gyms[gym_id] = gym     
-                    self.last_scan_gyms[gym_id]['gym_updated'] = True  
-                if  gym['last_scanned'] > self.last_scan_gyms[gym_id]['last_scanned']:
+                    force_as_updated = not self.ignore_first_scan 
+                    self.last_scan_gyms[gym_id] = gym    
+                    self.last_scan_gyms[gym_id]['gym_updated'] = True 
+                    self.last_scan_gyms[gym_id]['gym_changed'] = True                   
+                    self.last_scan_gyms[gym_id]['is_raid'] = is_raid
+                    self.last_scan_gyms[gym_id]['is_egg'] = is_egg
+                    self.last_scan_gyms[gym_id]['is_raid_with_pokemon'] = is_raid_with_pokemon
+                    self.last_scan_gyms[gym_id]['is_egg_with_pokemon'] = is_egg_with_pokemon
+                    self.last_scan_gyms[gym_id]['is_normal'] = is_normal
+
+                
+                # valores armazenados anteriormente #
+                last_raid_pokemon_id = self.last_scan_gyms[gym_id]['raid_pokemon_id'] 
+                last_raid_start = self.last_scan_gyms[gym_id]['raid_start']     
+                last_raid_end = self.last_scan_gyms[gym_id]['raid_end'] 
+                last_is_normal = self.last_scan_gyms[gym_id]['is_normal']
+                last_is_egg = self.last_scan_gyms[gym_id]['is_egg'] 
+                last_is_egg_with_pokemon = self.last_scan_gyms[gym_id]['is_egg_with_pokemon'] 
+                last_is_raid_with_pokemon = self.last_scan_gyms[gym_id]['is_raid_with_pokemon'] 
+                last_is_raid = self.last_scan_gyms[gym_id]['is_raid'] 
+
+
+                
+                # Testes para verificar se o ginásio foi modificado #
+                gym_changed = False
+                if (last_is_egg and not is_egg) or (last_is_egg_with_pokemon and not is_egg_with_pokemon):
+                    pass
+                else:
+                    if is_egg_with_pokemon and not last_is_egg_with_pokemon:
+                        gym_changed = True
+                    elif is_egg and not last_is_egg and not last_is_egg_with_pokemon:
+                        gym_changed = True
+                    elif is_raid and not last_is_raid:
+                        gym_changed = True
+                    elif is_raid and is_raid_with_pokemon and not last_is_raid_with_pokemon:
+                        gym_changed = True
+                    elif is_normal and not last_is_normal and not last_is_egg:
+                        gym_changed = True
+
+
+                
+                gym_updated = gym_changed and (gym['last_scanned'] > self.last_scan_gyms[gym_id]['last_scanned'])
+
+
+                if not gym_id in self.gym_details:
+                    need_save_details = True
+                    self.gym_details[gym_id] = {}
+                    self.gym_details[gym_id]['name'] = gym['name']
+                    self.gym_details[gym_id]['alias'] = ''                    
+                    self.gym_details[gym_id]['address'] = get_address(gym['latitude'], gym['longitude'], self.googlemaps_api_key)
+                    gym_updated = True
+
+                if self.gym_details[gym_id]['name'] is None:
+                    if gym['name'] is None:
+                        self.gym_details[gym_id]['name'] = self.gym_details[gym_id]['address']
+                    else:
+                        need_save_details = True
+                        self.gym_details[gym_id]['name'] = gym['name']
+
+                #gym_changed = (last_raid_status_string != raid_status_string) or (is_raid and 'raid_pokemon_id' in self.last_scan_gyms[gym_id] and   raid_pokemon_id != self.last_scan_gyms[gym_id]['raid_pokemon_id'])
+                d = dict(
+                   gym_name=gym['name'],
+                   gym_changed=gym_changed,
+                   gym_updated=gym_updated,
+                   is_egg=is_egg,
+                   last_is_egg=last_is_egg,
+                   is_raid=is_raid,
+                   last_is_raid=last_is_raid, 
+                   is_normal=is_normal,
+                   last_is_normal=last_is_normal,
+                   
+                )
+                
+                if is_egg or is_raid or last_is_raid or last_is_egg:
+                    self.log.info(d)
+                if gym_changed or gym_updated or force_as_updated:
                     self.last_scan_gyms[gym_id].update(gym)
-                    self.last_scan_gyms[gym_id]['gym_updated'] = True  
+                    self.last_scan_gyms[gym_id]['raid_pokemon_id'] = raid_pokemon_id                
+                    self.last_scan_gyms[gym_id]['raid_pokemon_name'] = raid_pokemon_name                
+                    self.last_scan_gyms[gym_id]['gym_updated'] = gym_changed 
+                    self.last_scan_gyms[gym_id]['gym_changed'] = gym_updated
+                    self.last_scan_gyms[gym_id]['is_raid'] = is_raid
+                    self.last_scan_gyms[gym_id]['is_raid_with_pokemon'] = is_raid_with_pokemon
+                    self.last_scan_gyms[gym_id]['is_egg_with_pokemon'] = is_egg_with_pokemon
+                    self.last_scan_gyms[gym_id]['is_egg'] = is_egg
+                    self.last_scan_gyms[gym_id]['is_normal'] = is_normal
+            
+            if need_save_details:                    
+                save_to_file('gym_details.json', self.gym_details)    
+                
                 
         if self.scan_pokemon:
             
@@ -746,50 +851,29 @@ class RocketMapBot(threading.Thread, object):
         if self.scan_gyms:
             self.log_raid.info('Verificando ginásios ({0})...'.format(len(self.last_scan_gyms))) 
             
+                
             for gym_id in self.last_scan_gyms.iterkeys():
                 gym = self.last_scan_gyms[gym_id] 
-                
                 details = ''
                 raid_start = gym['raid_start']     
                 raid_end = gym['raid_end'] 
-                
-                raid_level = gym['raid_level'] 
-                raid_pokemon_id =  None  
-                if 'raid_pokemon_id' in gym and gym['raid_pokemon_id'] != 0:
-                    raid_pokemon_id = gym['raid_pokemon_id']
+                raid_pokemon_id = gym['raid_pokemon_id']
+                gym_updated = gym['gym_updated']
+                gym_changed = gym['gym_changed']
 
-                raid_pokemon_name = None 
-                if 'raid_pokemon_name' in gym:
-                    raid_pokemon_name = gym['raid_pokemon_name']
-                if not gym_id in self.gym_details:
-                    self.gym_details[gym_id] = {}
-                    self.gym_details[gym_id].update(gym)
-                    save_to_file('gym_details.json', self.gym_details)
-                if self.gym_details[gym_id]['name'] is None:
-                    self.gym_details[gym_id]['name'] = get_address(gym['latitude'], gym['longitude'], self.googlemaps_api_key)
-                    self.gym_details[gym_id]['generic_name'] = True
-                if 'generic_name' in self.gym_details[gym_id] and self.gym_details[gym_id]['generic_name'] and gym['name'] is not None:
-                    self.gym_details[gym_id]['name'] = gym['name']
-                    self.gym_details[gym_id]['generic_name'] = False
-                latitude = self.gym_details[gym_id]['latitude']
-                longitude = self.gym_details[gym_id]['longitude']
-                
+                raid_level = gym['raid_level']   
+                latitude = gym['latitude']
+                longitude = gym['longitude']                
+                raid_pokemon_name = gym['raid_pokemon_name']
 
                 gym_name = self.gym_details[gym_id]['name'] 
                 is_egg = raid_start > now
                 is_normal = raid_end < now
                 is_raid = not is_egg and not is_normal
 
-                    
-                    
                 
-                raid_status_string = str(is_egg) + str(is_normal) + str(is_raid)
-                last_raid_status_string = None if not 'raid_status_string' in self.gym_details[gym_id] else self.gym_details[gym_id]['raid_status_string']
-                gym_updated = (gym['last_scanned'] >= self.gym_details[gym_id]['last_scanned'])
-                gym_changed = (last_raid_status_string != raid_status_string) or (is_raid and raid_pokemon_id != self.gym_details[gym_id]['raid_pokemon_id'])
                 
                 gym_without_raid = (raid_end == 0 or raid_end < now or raid_level == 0)
-                is_dominated = (self.gym_details[gym_id]['team_id'] != gym['team_id'])
                 
                 is_client_interested_raid = False
                 try:
@@ -807,7 +891,7 @@ class RocketMapBot(threading.Thread, object):
                     if is_requested_level or is_requested_pokemon:
                         is_client_interested_raid = True
                         has_interested = True                    
-                if raid_level_request is None and pokemon_id_request is None:                    
+                if raid_level_request is None and not is_request_client:                    
                     if str(raid_level) in self.telegram_interested_raid:
                         has_interested = True
                         if str(chat_id_request) in self.telegram_interested_raid[str(raid_level)]:
@@ -820,11 +904,13 @@ class RocketMapBot(threading.Thread, object):
                 if gym_without_raid:
                     self.log_raid.debug('== --  [---]')
                 elif has_interested:                    
-                    if is_request_client or gym_changed:                                             
+                    if is_request_client or gym_changed:   
+                        self.last_scan_gyms[gym_id]['gym_updated'] = False 
+                        self.last_scan_gyms[gym_id]['gym_changed'] = False                                          
                         time_raid_start = timestamp_to_time(raid_start)
                         time_raid_end = timestamp_to_time(raid_end)  
                         self.log_raid.info('= analisando: {0} (de {1} para {2})'.format(gym_name, 
-                                                        timestamp_to_time(self.gym_details[gym_id]['last_scanned']), 
+                                                        timestamp_to_time(self.last_scan_gyms[gym_id]['last_scanned']), 
                                                         timestamp_to_time(gym['last_scanned']), 
                                                         ))  
                         team_name = TEAM_LIST[gym['team_id']]
@@ -867,19 +953,17 @@ class RocketMapBot(threading.Thread, object):
                         photo = POKEMON_THUMBNAIL_MAP_URL.format(icon=icon, latitude=latitude, longitude=longitude, googlemaps_api_key=self.googlemaps_api_key) 
                         msg = msg.format(**locals())   
      
-                        if not is_request_client and not NEED_IGNORE:                   
+                        if not is_request_client:                   
                             self.send_to_interested(latitude=latitude, longitude=longitude, raid_level=raid_level, pokemon_id=raid_pokemon_id, message=msg, photo=photo)
                         else:
                             if is_client_interested_raid:
                                 self.telegram_send_to_user(chat_id_request, msg, photo=photo)
+            
 
-                if gym_updated:
-                    if chat_id_request is None:
-                        self.gym_details[gym_id].update(gym) 
-                        self.gym_details[gym_id]['raid_status_string'] = raid_status_string
+
                         
 
-
+        # ---------------- Pokémon --------------------------- #
         if raid_level_request is None and self.scan_pokemon:
             self.log_pokemon.info('Verificando pokémon ({0})...'.format(len(self.last_scan_pokemon))) 
             poke_counter = 0
