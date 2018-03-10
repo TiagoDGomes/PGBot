@@ -675,13 +675,12 @@ class RocketMapBot(threading.Thread, object):
                 force_as_updated = False
                 # valores do último update #
                 raid_pokemon_id =  None  
+                raid_pokemon_name = None 
                 if 'raid_pokemon_id' in gym and gym['raid_pokemon_id'] != 0:
                     raid_pokemon_id = gym['raid_pokemon_id']
                 
-                raid_pokemon_name = None 
-                if 'raid_pokemon_name' in gym:
-                    raid_pokemon_name = gym['raid_pokemon_name']
-
+                
+                raid_level = gym['raid_level']     
                 raid_start = gym['raid_start']     
                 raid_end = gym['raid_end'] 
                 is_egg = raid_start > now
@@ -712,6 +711,8 @@ class RocketMapBot(threading.Thread, object):
                 last_is_raid_with_pokemon = self.last_scan_gyms[gym_id]['is_raid_with_pokemon'] 
                 last_is_raid = self.last_scan_gyms[gym_id]['is_raid'] 
 
+                if 'raid_pokemon_name' in gym and not is_normal:
+                    raid_pokemon_name = gym['raid_pokemon_name']
 
                 
                 # Testes para verificar se o ginásio foi modificado #
@@ -751,22 +752,20 @@ class RocketMapBot(threading.Thread, object):
                         self.gym_details[gym_id]['name'] = gym['name']
 
                 #gym_changed = (last_raid_status_string != raid_status_string) or (is_raid and 'raid_pokemon_id' in self.last_scan_gyms[gym_id] and   raid_pokemon_id != self.last_scan_gyms[gym_id]['raid_pokemon_id'])
-                d = dict(
-                   gym_name=gym['name'],
-                   gym_changed=gym_changed,
-                   gym_updated=gym_updated,
-                   is_egg=is_egg,
-                   last_is_egg=last_is_egg,
-                   is_raid=is_raid,
-                   last_is_raid=last_is_raid, 
-                   is_normal=is_normal,
-                   last_is_normal=last_is_normal,
-                   
-                )
                 
-                if is_egg or is_raid or last_is_raid or last_is_egg:
-                    self.log.info(d)
+                
+                if is_egg != last_is_egg or is_raid != last_is_raid or is_normal != last_is_normal:
+                    a = 'Y' if is_egg else 'N'
+                    b = 'Y' if last_is_egg else 'N'
+                    c = 'Y' if is_raid else 'N'
+                    d = 'Y' if last_is_raid else 'N'
+                    e = 'Y' if is_normal else 'N'
+                    f = 'Y' if last_is_normal else 'N'
+                    g = 'Y' if gym_changed else 'N'
+                    
+                    self.log.info('AE={0} LE={1} | AR={2} LR={3} | AN={4} LN={5} | CH={6} | {7} {8} | {9} '.format(a, b, c, d, e, f, g, raid_level, raid_pokemon_name, gym['name']))
                 if gym_changed or gym_updated or force_as_updated:
+                    
                     self.last_scan_gyms[gym_id].update(gym)
                     self.last_scan_gyms[gym_id]['raid_pokemon_id'] = raid_pokemon_id                
                     self.last_scan_gyms[gym_id]['raid_pokemon_name'] = raid_pokemon_name                
@@ -867,13 +866,13 @@ class RocketMapBot(threading.Thread, object):
                 raid_pokemon_name = gym['raid_pokemon_name']
 
                 gym_name = self.gym_details[gym_id]['name'] 
-                is_egg = raid_start > now
-                is_normal = raid_end < now
-                is_raid = not is_egg and not is_normal
+                is_egg = gym['is_egg']
+                is_normal = gym['is_normal']
+                is_raid = gym['is_raid']
 
                 
                 
-                gym_without_raid = (raid_end == 0 or raid_end < now or raid_level == 0)
+                gym_without_raid = is_normal
                 
                 is_client_interested_raid = False
                 try:
@@ -909,7 +908,7 @@ class RocketMapBot(threading.Thread, object):
                         self.last_scan_gyms[gym_id]['gym_changed'] = False                                          
                         time_raid_start = timestamp_to_time(raid_start)
                         time_raid_end = timestamp_to_time(raid_end)  
-                        self.log_raid.info('= analisando: {0} (de {1} para {2})'.format(gym_name, 
+                        self.log_raid.debug('= analisando: {0} (de {1} para {2})'.format(gym_name, 
                                                         timestamp_to_time(self.last_scan_gyms[gym_id]['last_scanned']), 
                                                         timestamp_to_time(gym['last_scanned']), 
                                                         ))  
@@ -920,13 +919,13 @@ class RocketMapBot(threading.Thread, object):
                             details = '\nAtraso do mapa: {diff}min.'.format(diff=diff)
                         if is_egg and raid_pokemon_id is None:
                             ''' Raid não começou '''
-                            self.log_raid.info('== L{0} = [---] (start: {1})'.format(raid_level, time_raid_start))
+                            self.log_raid.debug('== L{0} = [---] (start: {1})'.format(raid_level, time_raid_start))
                             msg = NOTIFICATION_RAID_EGG_FORMAT
                             icon = RAID_EGG_ICONS[int(raid_level)]
                         else:
                             if raid_pokemon_id is None:
                                 ''' Mapa Atrasado '''
-                                self.log_raid.info('== L{0} = [{1}] (end: {2}) bot atrasado'.format(raid_level, '????', time_raid_end))
+                                self.log_raid.debug('== L{0} = [{1}] (end: {2}) bot atrasado'.format(raid_level, '????', time_raid_end))
                                 
                                 msg = NOTIFICATION_RAID_HATCH_LAZY_FORMAT
                                 
@@ -943,7 +942,7 @@ class RocketMapBot(threading.Thread, object):
                                 except:
                                     pass
                                 
-                                self.log_raid.info('== L{0} = [{1}] (end: {2})'.format(raid_level, raid_pokemon_name, time_raid_end))
+                                self.log_raid.debug('== L{0} = [{1}] (end: {2})'.format(raid_level, raid_pokemon_name, time_raid_end))
                                 msg = NOTIFICATION_RAID_HATCH_FORMAT
                                 try:
                                     icon = RAID_HATCH_ICON_LIST[str(raid_pokemon_id)]
