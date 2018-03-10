@@ -49,8 +49,11 @@ class RocketMapBot(threading.Thread, object):
                             main_group=[],
                             min_iv=90,
                             always_full_address=False,
+                            ignore_first_scan=True,
                             ):
         super(RocketMapBot, self).__init__()
+        self.ignore_first_scan = ignore_first_scan
+        self.count_first_scan = 1
         self.always_full_address = always_full_address
         self.min_iv = min_iv
         self.main_group = main_group
@@ -233,8 +236,9 @@ class RocketMapBot(threading.Thread, object):
         for key in self.last_scan_pokemon.iterkeys():                
             pokemon = self.last_scan_pokemon[key]
             latitude = pokemon['latitude']
-            longitude = pokemon['longitude']   
-            diff = 0.005
+            longitude = pokemon['longitude']  
+            iv, at, df, st = self._pokemon_stats(pokemon) 
+            diff = 0.0017
             swLat = latitude - diff
             neLat = latitude + diff
             swLng = longitude - diff
@@ -252,12 +256,15 @@ class RocketMapBot(threading.Thread, object):
                 #icon = POKEMON_ICON.format(pokemon_id=pokemon['pokemon_id'])
                 #markers += MULTI_POKEMON_MARKER.format(**locals()) 
                 markers += '&markers=size:mid%7Ccolor:{color}%7Clabel:{label}%7C{latitude},{longitude}'.format(color='0xff0000', label=label, latitude=latitude, longitude=longitude)
-                msg += '{0} - {1} ({2})\n'.format(label, pokemon['pokemon_name'], timestamp_to_time(pokemon['disappear_time']))
+                other = ''
+                if iv >= 0:
+                    other = ' - {0}%'.format(iv)
+                msg += '{0} - {1} ⏱ {2} {3}\n'.format(label, pokemon['pokemon_name'], timestamp_to_time(pokemon['disappear_time']), other)
 
         if markers:
             photo = MULTI_POKEMON_THUMBNAIL_MAP_URL.format(markers=markers, googlemaps_api_key=self.googlemaps_api_key)
             photo = get_url(photo, self.googlemaps_api_key)
-            self.log.info(('photo=', photo))
+            #self.log.info(('photo=', photo))
             self.telegram_send_to_user(chat_id, msg=msg, photo=photo)
         else:
             self.telegram_send_to_user(chat_id, msg='Nenhum pokémon encontrado nesta localização.')
@@ -294,11 +301,17 @@ class RocketMapBot(threading.Thread, object):
                 iv, at, df, st = self._pokemon_stats(pokemon)
                 
                 if at is not None and df is not None and st is not None :
-                    details = '{d}\nIV: {iv}% ({at}/{df}/{st})'.format(d=details, iv=iv, at=at, df=df, st=st)                                    
+                    details += '\nIV: {iv}% ({at}/{df}/{st})'.format(iv=iv, at=at, df=df, st=st)
+                else:
+                    details += '\nIV: ??% (??/??/??)'                                    
                 if pokemon['cp'] is not None:
-                    details = '{0}\nCP: {1}'.format(details, pokemon['cp'])
+                    details += '\nCP: {0}'.format(pokemon['cp'])
+                else:
+                    details += '\nCP: ????'
                 if pokemon['level'] is not None:
-                    details = '{0} | L{1}'.format(details, pokemon['level'])
+                    details += ' | L{0}'.format( pokemon['level'])
+                else:
+                    details += ' | L ??'
                 details += '\nAtualizado em {0}'.format(timestamp_to_time(time.time()*1000))
                 g = pokemon['gender']
                 try:
@@ -307,21 +320,21 @@ class RocketMapBot(threading.Thread, object):
                     pass
                 if iv < 0:
                     keyboard = [
-                        [InlineKeyboardButton("Buscar IV novamente",callback_data='IV|{0},{1},{2}'.format(pokemon['encounter_id'], pokemon['latitude'], pokemon['longitude']))],
+                        [InlineKeyboardButton("Atualizar novamente",callback_data='IV|{0},{1},{2}'.format(pokemon['encounter_id'], pokemon['latitude'], pokemon['longitude']))],
                     ]
                     reply_markup = InlineKeyboardMarkup(keyboard)
                 else:
-                    reply_markup = None          
-                        
+                    reply_markup = None    
                 pokemon['details'] = '{0}\n{1}'.format(details, get_address(pokemon['latitude'], pokemon['longitude'], self.googlemaps_api_key,no_cache=True, force=False))
                 msg = NOTIFICATION_WILD_FORMAT.format(**pokemon)
-                
+                msg = '<a href="{1}">&#8205;</a>{0}'.format(msg, pokemon['photo'])
                 try:
                     bot.editMessageText(
                         message_id=update.callback_query.message.message_id,
                         chat_id=update.callback_query.message.chat.id,
                         text=msg,
                         reply_markup=reply_markup,
+                        parse_mode=telegram.ParseMode.HTML
                     )
                 except:
                     try:
@@ -530,13 +543,9 @@ class RocketMapBot(threading.Thread, object):
                         self.log.info('[t] Enviando para {0}...'.format(chat_id))
                         try:
                             if photo:
-                                if len(msg) < 200:                           
-                                    self.telegram_bot.send_photo(chat_id=(chat_id), photo=photo, caption=msg, reply_markup=reply_markup)
-                                    self.log.info('[t] Enviado.') 
-                                else:
-                                    final_text = '<a href="{1}">&#8205;</a>{0}'.format(msg, photo)                            
-                                    self.telegram_bot.send_message(chat_id=chat_id, text=final_text, parse_mode=telegram.ParseMode.HTML, disable_web_page_preview=False, reply_markup=reply_markup)
-                                    self.log.info('[t] Enviado.')                                
+                                final_text = '<a href="{1}">&#8205;</a>{0}'.format(msg, photo)                            
+                                self.telegram_bot.send_message(chat_id=chat_id, text=final_text, parse_mode=telegram.ParseMode.HTML, disable_web_page_preview=False, reply_markup=reply_markup)
+                                self.log.info('[t] Enviado.')                                
                             else:
                                 self.telegram_bot.send_message(chat_id=chat_id, text=msg, disable_web_page_preview=not preview, parse_mode=parse_mode, reply_markup=reply_markup) 
                         except telegram.error.Unauthorized:
@@ -547,10 +556,10 @@ class RocketMapBot(threading.Thread, object):
                             if 'not found' in bre.message:
                                 self.telegram_clients_ignore[chat_id] = 1
                         except Exception as e:
-                            self.log.info('[t] Erro ao enviar para {0}...'.format(chat_id))     
+                            self.log.error('[t] Erro ao enviar para {0}...'.format(chat_id))     
                             self.log.error(e.message) 
                             time.sleep(2)  
-                            self.telegram_send_to_user(chat_id, msg, photo,preview ,parse_mode, reply_markup=reply_markup)
+                            #self.telegram_send_to_user(chat_id, msg, photo,preview ,parse_mode, reply_markup=reply_markup)
                         
             except IndexError: 
                 time.sleep(0.5)  
@@ -560,17 +569,22 @@ class RocketMapBot(threading.Thread, object):
         self.telegram_spool.append((chat_id, msg, photo,preview,parse_mode,reply_markup))
 
 
-    def telegram_has_interested(self, pokemon_id=None, raid_level=None):
+    def telegram_has_interested(self, pokemon_id=None, raid_level=None, iv=None):
         if pokemon_id is not None:
             if pokemon_id in self.telegram_interested_pokemon:                
                 return len(self.telegram_interested_pokemon[pokemon_id]) >= 2
             if str(pokemon_id) in self.telegram_interested_pokemon:
                 return len(self.telegram_interested_pokemon[str(pokemon_id)]) >= 2
+            
         if raid_level is not None:
             if raid_level in self.telegram_interested_raid:
                 return len(self.telegram_interested_raid[raid_level]) > 2
             if str(raid_level) in self.telegram_interested_raid:
                 return len(self.telegram_interested_raid[str(raid_level)]) > 2
+        if iv is not None:
+            for c in self.telegram_interested_iv['clients'].iterkeys():
+                if iv > self.telegram_interested_iv['clients'][c]:
+                    return True
         return False
         
     def send_to_interested(self, latitude, longitude, raid_level=None, is_egg=True, pokemon_id=None, iv=-1, message=None, time_delay=0, photo=None, telegram_chat_id=None, encounter_id=None):        
@@ -595,7 +609,7 @@ class RocketMapBot(threading.Thread, object):
             if pokemon_id:
                 try:                     
                     keyboard = [
-                        [InlineKeyboardButton("Buscar IV",callback_data='IV|{0},{1},{2}'.format(encounter_id, latitude, longitude))],
+                        [InlineKeyboardButton("Atualizar",callback_data='IV|{0},{1},{2}'.format(encounter_id, latitude, longitude))],
                     ]                     
                     if telegram_chat_id is None:
                         _list = self.telegram_interested_pokemon[str(pokemon_id)].iterkeys()
@@ -603,7 +617,7 @@ class RocketMapBot(threading.Thread, object):
                         _list = [telegram_chat_id,]
                     for chat_id in _list:
                         if not chat_id in telegram_interested and not '_' in str(chat_id):
-                            if iv < 0:
+                            if iv < 0 and raid_level is None:
                                 reply_markup = InlineKeyboardMarkup(keyboard) 
                             else:
                                 reply_markup = None
@@ -715,6 +729,13 @@ class RocketMapBot(threading.Thread, object):
         
     def verify(self, chat_id_request=None, pokemon_id_request=None, raid_level_request=None, latitude_request=None, longitude_request=None,):
         #raw_data = self.last_raw_data
+        NEED_IGNORE = False
+        if self.ignore_first_scan:
+            if self.count_first_scan <= len(self.url_list) :
+                self.log.info('''Ignorando primeiros scans''')
+                self.count_first_scan += 1 
+                NEED_IGNORE = True
+
         now =  int(time.time() * 1000)         
         details = ''
         is_request_client = (chat_id_request is not None)
@@ -844,8 +865,9 @@ class RocketMapBot(threading.Thread, object):
                                     icon = RAID_HATCH_ICON.format(pokemon_id=raid_pokemon_id)   
         
                         photo = POKEMON_THUMBNAIL_MAP_URL.format(icon=icon, latitude=latitude, longitude=longitude, googlemaps_api_key=self.googlemaps_api_key) 
-                        msg = msg.format(**locals())    
-                        if not is_request_client:                   
+                        msg = msg.format(**locals())   
+     
+                        if not is_request_client and not NEED_IGNORE:                   
                             self.send_to_interested(latitude=latitude, longitude=longitude, raid_level=raid_level, pokemon_id=raid_pokemon_id, message=msg, photo=photo)
                         else:
                             if is_client_interested_raid:
@@ -873,7 +895,7 @@ class RocketMapBot(threading.Thread, object):
                     latitude = pokemon['latitude']
                     longitude = pokemon['longitude'] 
                     already_notify = pokemon['already_notify']
-                    iv_changed = 'iv_changed' in pokemon and pokemon['iv_changed']                          
+                    is_notified_iv = 'is_notified_iv' in pokemon and pokemon['is_notified_iv']                          
 
                     move_list = ''
                     try:
@@ -907,8 +929,8 @@ class RocketMapBot(threading.Thread, object):
                              
                         elif str(pokemon_id_request) == str(pokemon_id) or str(pokemon_id_request).lower() == pokemon_name.lower() :
                             client_has_interested = True
-                            
-                    if not already_notify or client_has_interested or (chat_id_request is None and iv_changed):                        
+     
+                    if not already_notify or client_has_interested or (chat_id_request is None and not is_notified_iv):                        
                         self.log_pokemon.debug(pokemon_name + ' apareceu') 
                         try:
                             gender = GENDER_LIST[int(pokemon['gender'])]
@@ -932,7 +954,7 @@ class RocketMapBot(threading.Thread, object):
                                               
                         if self.always_full_address or pokemon_id in RARE_LIST or iv > 93:
                             no_cache = True
-                        if self.telegram_has_interested(pokemon_id=pokemon_id):
+                        if self.telegram_has_interested(pokemon_id=pokemon_id, iv=iv):
                             no_cache = True
                         details = '{0}\n{1}'.format(details, get_address(latitude, longitude, self.googlemaps_api_key,no_cache=no_cache, force=False))
                         disappear_time_str = timestamp_to_time(disappear_time)
@@ -940,7 +962,8 @@ class RocketMapBot(threading.Thread, object):
                         msg = NOTIFICATION_WILD_FORMAT.format(**locals())
                         icon = POKEMON_ICON.format(pokemon_id=pokemon_id)
                         photo = POKEMON_THUMBNAIL_MAP_URL.format(icon=icon, latitude=latitude, longitude=longitude, googlemaps_api_key=self.googlemaps_api_key)           
-                        if not is_request_client:
+                        pokemon['photo'] = photo
+                        if not is_request_client and not NEED_IGNORE:
                             self.send_to_interested(latitude=latitude, longitude=longitude, pokemon_id=pokemon_id, message=msg, iv=iv, photo=photo, encounter_id=pokemon['encounter_id'])
                             self.last_scan_pokemon[key]['already_notify'] = True
                             self.last_scan_pokemon[key]['iv_changed'] = False     
@@ -954,7 +977,8 @@ class RocketMapBot(threading.Thread, object):
                 len_storage = len(self.last_scan_pokemon)
                 self.log_pokemon.info('Novos: {0}; Armazenados: {1}'.format(
                                     poke_counter, 
-                                    len_storage))   
+                                    len_storage))  
+
 
     def _pokemon_stats(self, pokemon):
         iv, at, df, st = -1, None, None, None
