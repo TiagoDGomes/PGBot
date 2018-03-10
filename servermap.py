@@ -63,7 +63,8 @@ class ServerMap(object):
                 result = requests.post(url, data=data, cookies=self.cookies, headers=h)
             else:
                 result = requests.get(url, data=data, cookies=self.cookies, headers=h)
-            self.log.info ('Baixado.')
+            b = len(result.text)
+            self.log.info ('Baixado. {0} bytes'.format(b) )
             cookies = {i.name: i.value for i in list(result.cookies)}
             if result.cookies.get('PHPSESSID') is not None:     
                 self.cookies = cookies
