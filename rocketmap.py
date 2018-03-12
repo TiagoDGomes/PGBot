@@ -50,8 +50,10 @@ class RocketMapBot(threading.Thread, object):
                             min_iv=90,
                             always_full_address=False,
                             ignore_first_scan=True,
+                            ignore_iv_change=True,
                             ):
         super(RocketMapBot, self).__init__()
+        self.ignore_iv_change = ignore_iv_change
         self.ignore_first_scan = ignore_first_scan
         self.count_first_scan = 1
         self.always_full_address = always_full_address
@@ -279,7 +281,63 @@ class RocketMapBot(threading.Thread, object):
         if name.lower() in pokemon_list:
             pokemon_id = int(pokemon_list.index(name.lower()))    
         return pokemon_id           
+
+    def telegram_refresh_message(self, key, message_id, chat_id):
+        bot = self.telegram_bot
+        details = ''
+        pokemon = self.last_scan_pokemon[key]
+        iv, at, df, st = self._pokemon_stats(pokemon)
         
+        if at is not None and df is not None and st is not None :
+            details += '\nIV: {iv}% ({at}/{df}/{st})'.format(iv=iv, at=at, df=df, st=st)
+        else:
+            details += '\nIV: ??% (??/??/??)'                                    
+        if pokemon['cp'] is not None:
+            details += '\nCP: {0}'.format(pokemon['cp'])
+        else:
+            details += '\nCP: ????'
+        if pokemon['level'] is not None:
+            details += ' | L{0}'.format( pokemon['level'])
+        else:
+            details += ' | L ??'
+        details += '\nAtualizado em {0}'.format(timestamp_to_time(time.time()*1000))
+        g = pokemon['gender']
+        try:
+            pokemon['gender'] = GENDER_LIST[int(g)] 
+        except:
+            pass
+        if iv < 0:
+            keyboard = [
+                [InlineKeyboardButton("Atualizar novamente",callback_data='IV|{0},{1},{2}'.format(pokemon['encounter_id'], pokemon['latitude'], pokemon['longitude']))],
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+        else:
+            reply_markup = None    
+        pokemon['details'] = '{0}\n{1}'.format(details, get_address(pokemon['latitude'], pokemon['longitude'], self.googlemaps_api_key,no_cache=True, force=False))
+        msg = NOTIFICATION_WILD_FORMAT.format(**pokemon)
+        msg = '<a href="{1}">&#8205;</a>{0}'.format(msg, pokemon['photo'])
+        try:
+            bot.editMessageText(
+                message_id=message_id,
+                chat_id=chat_id,
+                text=msg,
+                reply_markup=reply_markup,
+                parse_mode=telegram.ParseMode.HTML
+            )
+        except:
+            try:
+                bot.editMessageCaption(
+                    message_id=message_id,
+                    chat_id=chat_id,
+                    caption=msg,
+                    reply_markup=reply_markup,
+                )
+            except Exception as e:
+                self.log.error(e.message)
+        pokemon['gender'] = g
+
+
+
     def telegram_button_click(self, bot, update):
         query = update.callback_query 
         msg = 'Escolha inválida.'
@@ -296,58 +354,9 @@ class RocketMapBot(threading.Thread, object):
                 self.telegram_command_show_pokemon(bot, query, data_split[1:])
             elif data_split[0] == 'IV':
                 key = data_split[1]
-                pokemon = self.last_scan_pokemon[key]
-                details = ''
-                iv, at, df, st = self._pokemon_stats(pokemon)
-                
-                if at is not None and df is not None and st is not None :
-                    details += '\nIV: {iv}% ({at}/{df}/{st})'.format(iv=iv, at=at, df=df, st=st)
-                else:
-                    details += '\nIV: ??% (??/??/??)'                                    
-                if pokemon['cp'] is not None:
-                    details += '\nCP: {0}'.format(pokemon['cp'])
-                else:
-                    details += '\nCP: ????'
-                if pokemon['level'] is not None:
-                    details += ' | L{0}'.format( pokemon['level'])
-                else:
-                    details += ' | L ??'
-                details += '\nAtualizado em {0}'.format(timestamp_to_time(time.time()*1000))
-                g = pokemon['gender']
-                try:
-                    pokemon['gender'] = GENDER_LIST[int(g)] 
-                except:
-                    pass
-                if iv < 0:
-                    keyboard = [
-                        [InlineKeyboardButton("Atualizar novamente",callback_data='IV|{0},{1},{2}'.format(pokemon['encounter_id'], pokemon['latitude'], pokemon['longitude']))],
-                    ]
-                    reply_markup = InlineKeyboardMarkup(keyboard)
-                else:
-                    reply_markup = None    
-                pokemon['details'] = '{0}\n{1}'.format(details, get_address(pokemon['latitude'], pokemon['longitude'], self.googlemaps_api_key,no_cache=True, force=False))
-                msg = NOTIFICATION_WILD_FORMAT.format(**pokemon)
-                msg = '<a href="{1}">&#8205;</a>{0}'.format(msg, pokemon['photo'])
-                try:
-                    bot.editMessageText(
+                self.telegram_refresh_message(key,
                         message_id=update.callback_query.message.message_id,
-                        chat_id=update.callback_query.message.chat.id,
-                        text=msg,
-                        reply_markup=reply_markup,
-                        parse_mode=telegram.ParseMode.HTML
-                    )
-                except:
-                    try:
-                        bot.editMessageCaption(
-                            message_id=update.callback_query.message.message_id,
-                            chat_id=update.callback_query.message.chat.id,
-                            caption=msg,
-                            reply_markup=reply_markup,
-                        )
-                    except Exception as e:
-                        self.log.error(e.message)
-                pokemon['gender'] = g
-
+                        chat_id=update.callback_query.message.chat.id,)
         except Exception as e:
             try: traceback.print_exc()           
             except: self.log.error(e.message)
@@ -545,10 +554,12 @@ class RocketMapBot(threading.Thread, object):
                         try:
                             if photo:
                                 final_text = '<a href="{1}">&#8205;</a>{0}'.format(msg, photo)                            
-                                self.telegram_bot.send_message(chat_id=chat_id, text=final_text, parse_mode=telegram.ParseMode.HTML, disable_web_page_preview=False, reply_markup=reply_markup)
+                                q = self.telegram_bot.send_message(chat_id=chat_id, text=final_text, parse_mode=telegram.ParseMode.HTML, disable_web_page_preview=False, reply_markup=reply_markup)
                                 self.log.info('[t] Enviado.')                                
+                                self.log.info(('q=', q))
                             else:
-                                self.telegram_bot.send_message(chat_id=chat_id, text=msg, disable_web_page_preview=not preview, parse_mode=parse_mode, reply_markup=reply_markup) 
+                                r = self.telegram_bot.send_message(chat_id=chat_id, text=msg, disable_web_page_preview=not preview, parse_mode=parse_mode, reply_markup=reply_markup) 
+                                self.log.info(('r=', r))
                         except telegram.error.Unauthorized:
                             self.telegram_clients_ignore[chat_id] = 1
                         except telegram.error.TimedOut:
@@ -618,12 +629,12 @@ class RocketMapBot(threading.Thread, object):
                         _list = [telegram_chat_id,]
                     for chat_id in _list:
                         if not chat_id in telegram_interested and not '_' in str(chat_id):
-                            if iv < 0 and raid_level is None:
-                                reply_markup = InlineKeyboardMarkup(keyboard) 
-                            else:
-                                reply_markup = None
+                            #if (iv < 0 and raid_level is None) or (not photo):
+                            reply_markup = InlineKeyboardMarkup(keyboard) 
+                            #else:
+                            #    reply_markup = None
                             self.log.info('#{0} para {1}'.format(pokemon_id, chat_id))
-                            self.telegram_send_to_user(chat_id, message, photo=photo, reply_markup=reply_markup)
+                            self.telegram_send_to_user(chat_id, message, photo=None, reply_markup=reply_markup, parse_mode=telegram.ParseMode.HTML, preview=False)
                             telegram_interested.append(chat_id)
                 except KeyError:
                     pass        
@@ -1068,8 +1079,8 @@ class RocketMapBot(threading.Thread, object):
                     latitude = pokemon['latitude']
                     longitude = pokemon['longitude'] 
                     already_notify = pokemon['already_notify']
-                    is_notified_iv = 'is_notified_iv' in pokemon and pokemon['is_notified_iv']                          
-                    iv_changed = 'iv_changed' in pokemon and pokemon['iv_changed']                          
+                    is_notified_iv = 'is_notified_iv' in pokemon and pokemon['is_notified_iv']  and self.ignore_iv_change                        
+                    iv_changed = 'iv_changed' in pokemon and pokemon['iv_changed'] and not self.ignore_iv_change                         
 
                     move_list = ''
                     try:
